@@ -50,7 +50,7 @@ export const TeacherAuthModal: React.FC<TeacherAuthModalProps> = ({
             <div className="p-2 bg-teal-50 rounded-lg border border-teal-200">
               <Lock className="w-4 h-4 text-teal-800" />
             </div>
-            <span className="text-sm">Accesso Riservato Docente</span>
+            <span className="text-sm">Accesso Riservato con PIN</span>
           </div>
           <button
             onClick={onClose}
@@ -61,8 +61,8 @@ export const TeacherAuthModal: React.FC<TeacherAuthModalProps> = ({
         </div>
 
         <p className="text-xs text-slate-600 mb-4 leading-relaxed">
-          Questa sezione è visibile solo al formatore (Pietro Citarella) per analizzare le risposte
-          anonime e guidare la restituzione finale in aula.
+          Accesso riservato a Pietro Citarella per analizzare le risposte anonime e guidare la
+          restituzione dei risultati in aula.
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-4">

@@ -98,14 +98,13 @@ export default function App() {
                 }`}
               >
                 <Lock className="w-3.5 h-3.5 text-teal-600" />
-                <span>3. Debriefing Risposte Anonime (Docente)</span>
+                <span>3. Debriefing Risposte Anonime</span>
               </button>
             )}
           </div>
 
-          <div className="flex items-center gap-3 text-xs text-slate-500 pr-2">
-            <span>Docente: </span>
-            <strong className="text-slate-800">Pietro Citarella</strong>
+          <div className="flex items-center gap-1.5 text-xs text-slate-600 pr-2">
+            <strong className="text-slate-800 font-semibold">Pietro Citarella</strong>
           </div>
         </div>
 
@@ -156,8 +155,8 @@ export default function App() {
               <Lock className="w-3.5 h-3.5 text-slate-500" />
               <span>
                 {isTeacherAuthenticated
-                  ? 'Area Docente: Debriefing (Aperta)'
-                  : 'Area Riservata Docente (Debriefing)'}
+                  ? 'Area Riservata: Debriefing (Aperta)'
+                  : 'Area Riservata (PIN)'}
               </span>
             </button>
           </div>

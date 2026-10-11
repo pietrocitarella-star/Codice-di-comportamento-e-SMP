@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { RISK_CHART_DATA, SOURCES_CHART_DATA, ROLE_RESPONSIBILITIES } from '../data/courseData';
+import { RISK_CHART_DATA, ROLE_RESPONSIBILITIES } from '../data/courseData';
 import { Info, HelpCircle } from 'lucide-react';
 
 export const RiskLevelsChart: React.FC = () => {
@@ -63,103 +63,6 @@ export const RiskLevelsChart: React.FC = () => {
         <span>🟢 1-3: Zona Protetta</span>
         <span>🟡 4-6: Cautela</span>
         <span>🔴 7-10: Alto Rischio Disciplinare</span>
-      </div>
-    </div>
-  );
-};
-
-export const SourcesDoughnutChart: React.FC = () => {
-  const [activeIndex, setActiveIndex] = useState<number | null>(0);
-
-  // SVG parameters
-  const size = 200;
-  const strokeWidth = 28;
-  const radius = (size - strokeWidth) / 2;
-  const circumference = 2 * Math.PI * radius;
-
-  let accumulatedPercent = 0;
-
-  return (
-    <div className="bg-slate-50/80 p-5 rounded-xl border border-slate-200">
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <h4 className="text-sm font-bold text-slate-900">Origine delle Segnalazioni</h4>
-          <p className="text-xs text-slate-500">Tipologie di infrazioni più frequenti nella PA</p>
-        </div>
-        <span className="text-[11px] text-slate-500">Dati aggregati</span>
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center">
-        {/* SVG Donut */}
-        <div className="relative flex items-center justify-center">
-          <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="transform -rotate-90">
-            {SOURCES_CHART_DATA.map((item, idx) => {
-              const strokeDasharray = `${(item.percentage / 100) * circumference} ${circumference}`;
-              const strokeDashoffset = -((accumulatedPercent / 100) * circumference);
-              accumulatedPercent += item.percentage;
-              const isSelected = activeIndex === idx;
-
-              return (
-                <circle
-                  key={idx}
-                  cx={size / 2}
-                  cy={size / 2}
-                  r={radius}
-                  fill="none"
-                  stroke={item.color}
-                  strokeWidth={isSelected ? strokeWidth + 4 : strokeWidth}
-                  strokeDasharray={strokeDasharray}
-                  strokeDashoffset={strokeDashoffset}
-                  className="transition-all duration-300 cursor-pointer hover:opacity-90"
-                  onClick={() => setActiveIndex(idx)}
-                />
-              );
-            })}
-          </svg>
-
-          {/* Center text in donut */}
-          <div className="absolute inset-0 flex flex-col items-center justify-center text-center pointer-events-none">
-            {activeIndex !== null ? (
-              <>
-                <span className="font-mono tabular-nums text-2xl font-extrabold text-slate-900">
-                  {SOURCES_CHART_DATA[activeIndex].percentage}%
-                </span>
-                <span className="text-[11px] text-slate-500 max-w-[90px] leading-tight mt-0.5">
-                  Frequenza
-                </span>
-              </>
-            ) : (
-              <span className="text-xs text-slate-500">Tocca una sezione</span>
-            )}
-          </div>
-        </div>
-
-        {/* Legend list */}
-        <div className="space-y-2 text-xs">
-          {SOURCES_CHART_DATA.map((item, idx) => {
-            const isSelected = activeIndex === idx;
-            return (
-              <button
-                key={idx}
-                onClick={() => setActiveIndex(idx)}
-                className={`w-full text-left p-2 rounded-lg transition-all flex items-center justify-between gap-2 ${
-                  isSelected ? 'bg-white shadow-sm ring-1 ring-slate-300' : 'hover:bg-white/60'
-                }`}
-              >
-                <div className="flex items-center gap-2 min-w-0">
-                  <span
-                    className="w-2.5 h-2.5 rounded-full shrink-0"
-                    style={{ backgroundColor: item.color }}
-                  />
-                  <span className="truncate text-slate-700 font-medium">{item.label}</span>
-                </div>
-                <span className="font-mono tabular-nums font-bold text-slate-900 shrink-0">
-                  {item.percentage}%
-                </span>
-              </button>
-            );
-          })}
-        </div>
       </div>
     </div>
   );

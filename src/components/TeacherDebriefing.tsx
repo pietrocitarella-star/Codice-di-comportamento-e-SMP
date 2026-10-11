@@ -72,7 +72,7 @@ export const TeacherDebriefing: React.FC<TeacherDebriefingProps> = ({ onLogout }
   };
 
   const handleShuffleCasesFromTeacher = () => {
-    // Shuffling from teacher area
+    debriefingService.triggerShuffle();
     setShuffledNotice(true);
     setTimeout(() => setShuffledNotice(false), 2500);
   };
@@ -330,7 +330,7 @@ export const TeacherDebriefing: React.FC<TeacherDebriefingProps> = ({ onLogout }
           <div>
             <div className="flex items-center gap-2 text-xs font-bold text-teal-800 mb-1">
               <Lock className="w-3.5 h-3.5" />
-              <span>Area Riservata Docente · Pietro Citarella (PIN: 2204)</span>
+              <span>Area Riservata · Pietro Citarella</span>
               <span aria-hidden="true">·</span>
               <span className="text-slate-500 font-normal">Gestione 4 Aule (27-28 Ottobre)</span>
             </div>
@@ -583,6 +583,16 @@ export const TeacherDebriefing: React.FC<TeacherDebriefingProps> = ({ onLogout }
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+            {/* Shuffle cases button for teacher */}
+            <button
+              onClick={handleShuffleCasesFromTeacher}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-lg font-semibold transition-colors text-xs"
+              title="Rimescola casualmente l'ordine dei casi alternando verde, giallo e rosso"
+            >
+              <Shuffle className="w-3.5 h-3.5 text-teal-700" />
+              <span>Rimescola Casi</span>
+            </button>
+
             {/* Seed mock participants for the selected classroom */}
             <button
               onClick={handleSeedClassroom}

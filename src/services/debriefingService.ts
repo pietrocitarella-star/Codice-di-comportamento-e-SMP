@@ -10,29 +10,29 @@ export const CLASSROOM_SESSIONS: ClassroomSessionInfo[] = [
     id: '27_ottobre_mattina',
     day: '27 Ottobre',
     slot: 'Mattina',
-    time: '09:00 - 13:00',
-    label: '27 Ottobre · Mattina (Aula 1)',
+    time: '9.30 - 11.30',
+    label: '27 Ottobre · Mattina (9.30 - 11.30)',
   },
   {
     id: '27_ottobre_pomeriggio',
     day: '27 Ottobre',
     slot: 'Pomeriggio',
-    time: '14:00 - 18:00',
-    label: '27 Ottobre · Pomeriggio (Aula 2)',
+    time: '12.00 - 14.00',
+    label: '27 Ottobre · Pomeriggio (12.00 - 14.00)',
   },
   {
     id: '28_ottobre_mattina',
     day: '28 Ottobre',
     slot: 'Mattina',
-    time: '09:00 - 13:00',
-    label: '28 Ottobre · Mattina (Aula 3)',
+    time: '9.30 - 11.30',
+    label: '28 Ottobre · Mattina (9.30 - 11.30)',
   },
   {
     id: '28_ottobre_pomeriggio',
     day: '28 Ottobre',
     slot: 'Pomeriggio',
-    time: '14:00 - 18:00',
-    label: '28 Ottobre · Pomeriggio (Aula 4)',
+    time: '12.00 - 14.00',
+    label: '28 Ottobre · Pomeriggio (12.00 - 14.00)',
   },
 ];
 
@@ -253,6 +253,27 @@ export const debriefingService = {
       window.removeEventListener('pa_debriefing_update', handleCustom);
       window.removeEventListener('pa_debriefing_session_change', handleCustom);
       window.removeEventListener('storage', handleStorage);
+      broadcastChannel?.removeEventListener('message', handleBroadcast);
+    };
+  },
+
+  // Trigger reshuffle from teacher area to simulator
+  triggerShuffle(): void {
+    if (typeof window === 'undefined') return;
+    window.dispatchEvent(new CustomEvent('pa_shuffle_cases'));
+    broadcastChannel?.postMessage({ type: 'SHUFFLE_CASES' });
+  },
+
+  onShuffle(callback: () => void): () => void {
+    if (typeof window === 'undefined') return () => {};
+    const handleEvent = () => callback();
+    const handleBroadcast = (msg: MessageEvent) => {
+      if (msg.data?.type === 'SHUFFLE_CASES') callback();
+    };
+    window.addEventListener('pa_shuffle_cases', handleEvent);
+    broadcastChannel?.addEventListener('message', handleBroadcast);
+    return () => {
+      window.removeEventListener('pa_shuffle_cases', handleEvent);
       broadcastChannel?.removeEventListener('message', handleBroadcast);
     };
   },

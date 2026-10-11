@@ -63,7 +63,6 @@ export const ScenarioSimulator: React.FC = () => {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [userChoice, setUserChoice] = useState<'Verde' | 'Giallo' | 'Rosso' | null>(null);
   const [solvedCases, setSolvedCases] = useState<Record<string, { choice: string; isCorrect: boolean }>>({});
-  const [selectedContext, setSelectedContext] = useState<string>('All');
   const [currentSessionId, setCurrentSessionId] = useState<ClassroomSessionId>(() =>
     debriefingService.getActiveSessionId()
   );
@@ -71,33 +70,24 @@ export const ScenarioSimulator: React.FC = () => {
     smartShuffleCases(TRAFFIC_LIGHT_CASES)
   );
 
-  const contexts = ['All', 'Bacheca Pubblica', 'Gruppo WhatsApp', 'LinkedIn', 'Foto & Storie', 'Commenti ai Media'];
-
-  // Listen to active session changes from teacher
+  // Listen to active session changes from teacher and shuffle commands
   useEffect(() => {
-    const unsub = debriefingService.onUpdate(() => {
+    const unsubSession = debriefingService.onUpdate(() => {
       setCurrentSessionId(debriefingService.getActiveSessionId());
     });
-    return () => unsub();
+    const unsubShuffle = debriefingService.onShuffle(() => {
+      setActiveCasesList(smartShuffleCases(TRAFFIC_LIGHT_CASES));
+      setCurrentIndex(0);
+      setUserChoice(null);
+    });
+    return () => {
+      unsubSession();
+      unsubShuffle();
+    };
   }, []);
 
-  // When context filter changes, update and shuffle
-  useEffect(() => {
-    let pool = TRAFFIC_LIGHT_CASES;
-    if (selectedContext !== 'All') {
-      pool = TRAFFIC_LIGHT_CASES.filter((c) => c.context === selectedContext);
-    }
-    setActiveCasesList(smartShuffleCases(pool));
-    setCurrentIndex(0);
-    setUserChoice(null);
-  }, [selectedContext]);
-
   const handleShuffleCases = () => {
-    let pool = TRAFFIC_LIGHT_CASES;
-    if (selectedContext !== 'All') {
-      pool = TRAFFIC_LIGHT_CASES.filter((c) => c.context === selectedContext);
-    }
-    setActiveCasesList(smartShuffleCases(pool));
+    setActiveCasesList(smartShuffleCases(TRAFFIC_LIGHT_CASES));
     setCurrentIndex(0);
     setUserChoice(null);
   };
@@ -179,28 +169,11 @@ export const ScenarioSimulator: React.FC = () => {
           </div>
         </div>
 
-        {/* Filter by context and Classroom session */}
+        {/* Classroom session strip */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-4 mt-4 border-t border-slate-100 text-xs">
-          <div className="flex items-center gap-1.5 overflow-x-auto">
-            <span className="font-medium text-slate-600 shrink-0">Filtra per canale:</span>
-            {contexts.map((ctx) => (
-              <button
-                key={ctx}
-                onClick={() => {
-                  setSelectedContext(ctx);
-                  setCurrentIndex(0);
-                  setUserChoice(null);
-                }}
-                className={`px-3 py-1 rounded-md whitespace-nowrap transition-colors ${
-                  selectedContext === ctx
-                    ? 'bg-teal-800 text-white font-semibold'
-                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                }`}
-              >
-                {ctx === 'All' ? 'Tutti i Canali' : ctx}
-              </button>
-            ))}
-          </div>
+          <span className="text-slate-500">
+            Dilemmi operativi del lavoro pubblico in sequenza mista
+          </span>
 
           <div className="flex items-center gap-1.5 bg-teal-50/80 text-teal-900 px-3 py-1 rounded-lg border border-teal-200/80 shrink-0">
             <Calendar className="w-3.5 h-3.5 text-teal-800 shrink-0" />
@@ -228,8 +201,6 @@ export const ScenarioSimulator: React.FC = () => {
               <span className="font-bold text-teal-800">
                 Caso {currentIndex + 1} di {activeCasesList.length}
               </span>
-              <span aria-hidden="true">·</span>
-              <span>Canale: {activeCase.context}</span>
             </div>
             {solvedCases[activeCase.id] && (
               <span

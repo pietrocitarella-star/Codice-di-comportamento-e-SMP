@@ -115,7 +115,7 @@ export const VademecumModal: React.FC<VademecumModalProps> = ({ isOpen, onClose 
           <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 text-center text-[11px] text-slate-600">
             <p>
               Materiale ad uso esclusivo dei corsi di formazione sul Codice di Comportamento dei Dipendenti Pubblici.
-              Docente / Autore: Pietro Citarella.
+              A cura di: Pietro Citarella.
             </p>
           </div>
         </div>
