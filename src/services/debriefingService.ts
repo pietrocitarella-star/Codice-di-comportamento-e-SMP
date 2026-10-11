@@ -1,10 +1,41 @@
-import { AnonymousSubmission, CaseDebriefStats } from '../types';
+import { AnonymousSubmission, CaseDebriefStats, ClassroomSessionId, ClassroomSessionInfo } from '../types';
 import { TRAFFIC_LIGHT_CASES } from '../data/courseData';
 
 const STORAGE_KEY = 'pa_social_anonymous_submissions';
+const ACTIVE_SESSION_KEY = 'pa_social_active_session';
 const CHANNEL_NAME = 'pa_social_debriefing_channel';
 
-// Pedagogical metadata for each case to guide Pietro's classroom debriefing
+export const CLASSROOM_SESSIONS: ClassroomSessionInfo[] = [
+  {
+    id: '27_ottobre_mattina',
+    day: '27 Ottobre',
+    slot: 'Mattina',
+    time: '09:00 - 13:00',
+    label: '27 Ottobre · Mattina (Aula 1)',
+  },
+  {
+    id: '27_ottobre_pomeriggio',
+    day: '27 Ottobre',
+    slot: 'Pomeriggio',
+    time: '14:00 - 18:00',
+    label: '27 Ottobre · Pomeriggio (Aula 2)',
+  },
+  {
+    id: '28_ottobre_mattina',
+    day: '28 Ottobre',
+    slot: 'Mattina',
+    time: '09:00 - 13:00',
+    label: '28 Ottobre · Mattina (Aula 3)',
+  },
+  {
+    id: '28_ottobre_pomeriggio',
+    day: '28 Ottobre',
+    slot: 'Pomeriggio',
+    time: '14:00 - 18:00',
+    label: '28 Ottobre · Pomeriggio (Aula 4)',
+  },
+];
+
 const DEBRIEF_METADATA: Record<
   string,
   {
@@ -74,7 +105,6 @@ const DEBRIEF_METADATA: Record<
   },
 };
 
-// Singleton BroadcastChannel for cross-tab sync in the browser
 let broadcastChannel: BroadcastChannel | null = null;
 if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
   try {
@@ -85,31 +115,76 @@ if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
 }
 
 export const debriefingService = {
-  // Record single anonymous answer
-  recordAnswer(caseId: string, choice: 'Verde' | 'Giallo' | 'Rosso'): void {
+  // Get active session ID
+  getActiveSessionId(): ClassroomSessionId {
+    if (typeof window === 'undefined') return '27_ottobre_mattina';
+    const stored = localStorage.getItem(ACTIVE_SESSION_KEY) as ClassroomSessionId;
+    if (stored && CLASSROOM_SESSIONS.some((s) => s.id === stored)) {
+      return stored;
+    }
+    return '27_ottobre_mattina';
+  },
+
+  // Set active session (Pietro can set which aula is active)
+  setActiveSessionId(sessionId: ClassroomSessionId): void {
+    if (typeof window === 'undefined') return;
+    localStorage.setItem(ACTIVE_SESSION_KEY, sessionId);
+    window.dispatchEvent(new CustomEvent('pa_debriefing_session_change', { detail: sessionId }));
+    broadcastChannel?.postMessage({ type: 'SESSION_CHANGE', sessionId });
+
+    // Sync active session with server
+    fetch('/api/responses/active-session', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId }),
+    }).catch(() => {});
+  },
+
+  // Record an anonymous answer for a specific session (or active session)
+  recordAnswer(
+    caseId: string,
+    choice: 'Verde' | 'Giallo' | 'Rosso',
+    sessionId?: ClassroomSessionId
+  ): void {
     if (typeof window === 'undefined') return;
 
+    const targetSession = sessionId || this.getActiveSessionId();
     const submission: AnonymousSubmission = {
       id: `${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
       caseId,
       choice,
+      sessionId: targetSession,
       timestamp: Date.now(),
     };
 
-    const current = this.getSubmissions();
+    // Save locally
+    const current = this.getLocalSubmissions();
     current.push(submission);
-
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(current));
       window.dispatchEvent(new CustomEvent('pa_debriefing_update', { detail: submission }));
       broadcastChannel?.postMessage({ type: 'NEW_SUBMISSION', submission });
     } catch (e) {
-      console.warn('Impossibile salvare sottomissione anonima in localStorage', e);
+      console.warn('LocalStorage error:', e);
     }
+
+    // Sync to server so Pietro receives answers from all classroom phones/devices
+    fetch('/api/responses', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        caseId,
+        choice,
+        sessionId: targetSession,
+      }),
+    }).catch((e) => {
+      // In offline/static mode, local storage continues to work
+      console.info('Offline mode / local storage only:', e);
+    });
   },
 
-  // Get raw submissions list
-  getSubmissions(): AnonymousSubmission[] {
+  // Read local submissions
+  getLocalSubmissions(): AnonymousSubmission[] {
     if (typeof window === 'undefined') return [];
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
@@ -120,42 +195,81 @@ export const debriefingService = {
     }
   },
 
-  // Subscribe to live updates
+  // Fetch submissions from server and merge with local
+  async syncFromServer(): Promise<AnonymousSubmission[]> {
+    if (typeof window === 'undefined') return [];
+    try {
+      const res = await fetch('/api/responses');
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data.submissions)) {
+          // Merge server submissions
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(data.submissions));
+          if (data.activeSessionId && CLASSROOM_SESSIONS.some((s) => s.id === data.activeSessionId)) {
+            localStorage.setItem(ACTIVE_SESSION_KEY, data.activeSessionId);
+          }
+          return data.submissions;
+        }
+      }
+    } catch {
+      // Fallback to local
+    }
+    return this.getLocalSubmissions();
+  },
+
+  // Filter submissions by session
+  getSubmissions(sessionId?: ClassroomSessionId | 'all'): AnonymousSubmission[] {
+    const all = this.getLocalSubmissions();
+    if (!sessionId || sessionId === 'all') {
+      return all;
+    }
+    return all.filter((s) => s.sessionId === sessionId);
+  },
+
+  // Subscribe to live events
   onUpdate(callback: () => void): () => void {
     if (typeof window === 'undefined') return () => {};
 
     const handleCustom = () => callback();
     const handleStorage = (e: StorageEvent) => {
-      if (e.key === STORAGE_KEY) callback();
+      if (e.key === STORAGE_KEY || e.key === ACTIVE_SESSION_KEY) callback();
     };
     const handleBroadcast = (msg: MessageEvent) => {
-      if (msg.data?.type === 'NEW_SUBMISSION' || msg.data?.type === 'RESET') {
+      if (
+        msg.data?.type === 'NEW_SUBMISSION' ||
+        msg.data?.type === 'RESET' ||
+        msg.data?.type === 'SESSION_CHANGE'
+      ) {
         callback();
       }
     };
 
     window.addEventListener('pa_debriefing_update', handleCustom);
+    window.addEventListener('pa_debriefing_session_change', handleCustom);
     window.addEventListener('storage', handleStorage);
     broadcastChannel?.addEventListener('message', handleBroadcast);
 
     return () => {
       window.removeEventListener('pa_debriefing_update', handleCustom);
+      window.removeEventListener('pa_debriefing_session_change', handleCustom);
       window.removeEventListener('storage', handleStorage);
       broadcastChannel?.removeEventListener('message', handleBroadcast);
     };
   },
 
-  // Compute aggregated stats for each case
-  getDebriefStats(): {
+  // Compute stats for a specific classroom session (or all)
+  getDebriefStats(sessionId?: ClassroomSessionId | 'all'): {
     cases: CaseDebriefStats[];
     totalSubmissions: number;
     totalParticipantsEstimated: number;
     overallAccuracy: number;
+    sessionId: ClassroomSessionId | 'all';
+    sessionLabel: string;
   } {
-    const submissions = this.getSubmissions();
+    const targetSession = sessionId || this.getActiveSessionId();
+    const submissions = this.getSubmissions(targetSession);
     const totalSubmissions = submissions.length;
 
-    // Estimate participants (max answers for any case or average)
     const countsPerCase: Record<string, number> = {};
     submissions.forEach((s) => {
       countsPerCase[s.caseId] = (countsPerCase[s.caseId] || 0) + 1;
@@ -216,64 +330,91 @@ export const debriefingService = {
     const overallAccuracy =
       totalSubmissions > 0 ? Math.round((correctTotal / totalSubmissions) * 100) : 0;
 
+    const sessionInfo = CLASSROOM_SESSIONS.find((s) => s.id === targetSession);
+    const sessionLabel =
+      targetSession === 'all'
+        ? 'Tutte le 4 Aule Riunite (Riepilogo Totale)'
+        : sessionInfo?.label || targetSession;
+
     return {
       cases,
       totalSubmissions,
       totalParticipantsEstimated,
       overallAccuracy,
+      sessionId: targetSession,
+      sessionLabel,
     };
   },
 
-  // Seed sample cohort of ~24-30 participants with realistic classroom distribution
-  seedSampleClassroom(targetParticipants = 26): void {
+  // Seed simulated classroom data for tests
+  seedSampleClassroom(sessionId: ClassroomSessionId, count = 26): void {
     const mockSubmissions: AnonymousSubmission[] = [];
 
-    // Distribution patterns for each case (Verde %, Giallo %, Rosso %)
     const distributions: Record<string, [number, number, number]> = {
-      'case-1': [70, 20, 10], // Verde: 70% correct, 20% yellow, 10% red
-      'case-2': [85, 10, 5],  // Verde: 85% correct
-      'case-3': [25, 45, 30], // Giallo: 45% correct, 25% think it's harmless Verde!
-      'case-4': [15, 60, 25], // Giallo: 60% correct
-      'case-5': [20, 55, 25], // Giallo: 55% correct
-      'case-6': [5, 15, 80],  // Rosso: 80% correct
-      'case-7': [5, 10, 85],  // Rosso: 85% correct
-      'case-8': [10, 25, 65], // Rosso: 65% correct
+      'case-1': [70, 20, 10],
+      'case-2': [85, 10, 5],
+      'case-3': [25, 45, 30],
+      'case-4': [15, 60, 25],
+      'case-5': [20, 55, 25],
+      'case-6': [5, 15, 80],
+      'case-7': [5, 10, 85],
+      'case-8': [10, 25, 65],
     };
 
     TRAFFIC_LIGHT_CASES.forEach((c) => {
       const dist = distributions[c.id] || [33, 33, 34];
-      const count = targetParticipants;
-
       for (let i = 0; i < count; i++) {
         const rand = Math.random() * 100;
         let choice: 'Verde' | 'Giallo' | 'Rosso' = 'Verde';
-        if (rand < dist[0]) {
-          choice = 'Verde';
-        } else if (rand < dist[0] + dist[1]) {
-          choice = 'Giallo';
-        } else {
-          choice = 'Rosso';
-        }
+        if (rand < dist[0]) choice = 'Verde';
+        else if (rand < dist[0] + dist[1]) choice = 'Giallo';
+        else choice = 'Rosso';
 
         mockSubmissions.push({
-          id: `seed-${c.id}-${i}-${Math.random().toString(36).substring(2, 6)}`,
+          id: `seed-${sessionId}-${c.id}-${i}-${Math.random().toString(36).substring(2, 6)}`,
           caseId: c.id,
           choice,
+          sessionId,
           timestamp: Date.now() - Math.floor(Math.random() * 3600000),
         });
       }
     });
 
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(mockSubmissions));
+    // Merge with existing other sessions
+    const existingOther = this.getLocalSubmissions().filter((s) => s.sessionId !== sessionId);
+    const merged = [...existingOther, ...mockSubmissions];
+
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
     window.dispatchEvent(new CustomEvent('pa_debriefing_update'));
     broadcastChannel?.postMessage({ type: 'NEW_SUBMISSION' });
+
+    // Sync to server
+    fetch('/api/responses/seed', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId, count }),
+    }).catch(() => {});
   },
 
-  // Clear data for next class
-  clearSubmissions(): void {
+  // Clear submissions for a specific classroom session, or for all
+  clearSubmissions(sessionId?: ClassroomSessionId | 'all'): void {
     if (typeof window === 'undefined') return;
-    localStorage.removeItem(STORAGE_KEY);
+
+    if (!sessionId || sessionId === 'all') {
+      localStorage.removeItem(STORAGE_KEY);
+    } else {
+      const remaining = this.getLocalSubmissions().filter((s) => s.sessionId !== sessionId);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(remaining));
+    }
+
     window.dispatchEvent(new CustomEvent('pa_debriefing_update'));
     broadcastChannel?.postMessage({ type: 'RESET' });
+
+    // Sync reset to server
+    fetch('/api/responses/reset', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId: sessionId || 'all' }),
+    }).catch(() => {});
   },
 };

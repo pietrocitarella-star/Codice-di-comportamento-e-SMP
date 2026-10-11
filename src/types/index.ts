@@ -1,5 +1,19 @@
 export type TabType = 'guida' | 'simulatore' | 'analizzatore' | 'quiz' | 'strumenti' | 'debriefing';
 
+export type ClassroomSessionId =
+  | '27_ottobre_mattina'
+  | '27_ottobre_pomeriggio'
+  | '28_ottobre_mattina'
+  | '28_ottobre_pomeriggio';
+
+export interface ClassroomSessionInfo {
+  id: ClassroomSessionId;
+  day: '27 Ottobre' | '28 Ottobre';
+  slot: 'Mattina' | 'Pomeriggio';
+  time: string;
+  label: string;
+}
+
 export interface TrafficLightCase {
   id: string;
   category: 'Verde' | 'Giallo' | 'Rosso';
@@ -16,6 +30,7 @@ export interface AnonymousSubmission {
   id: string;
   caseId: string;
   choice: 'Verde' | 'Giallo' | 'Rosso';
+  sessionId: ClassroomSessionId;
   timestamp: number;
 }
 

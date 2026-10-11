@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { debriefingService } from '../services/debriefingService';
-import { CaseDebriefStats } from '../types';
+import { debriefingService, CLASSROOM_SESSIONS } from '../services/debriefingService';
+import { ClassroomSessionId, CaseDebriefStats } from '../types';
 import {
   Lock,
   Users,
@@ -18,6 +18,10 @@ import {
   HelpCircle,
   Shield,
   ArrowUpDown,
+  Calendar,
+  Shuffle,
+  RefreshCw,
+  Check,
 } from 'lucide-react';
 
 interface TeacherDebriefingProps {
@@ -25,29 +29,78 @@ interface TeacherDebriefingProps {
 }
 
 export const TeacherDebriefing: React.FC<TeacherDebriefingProps> = ({ onLogout }) => {
-  const [stats, setStats] = useState(debriefingService.getDebriefStats());
+  const [selectedSession, setSelectedSession] = useState<ClassroomSessionId | 'all'>('27_ottobre_mattina');
+  const [stats, setStats] = useState(() => debriefingService.getDebriefStats('27_ottobre_mattina'));
   const [presentationMode, setPresentationMode] = useState(false);
   const [presentationCaseIndex, setPresentationCaseIndex] = useState(0);
   const [sortByCritical, setSortByCritical] = useState(false);
   const [confirmResetOpen, setConfirmResetOpen] = useState(false);
+  const [resetTarget, setResetTarget] = useState<'current' | 'all'>('current');
+  const [activeSessionNotice, setActiveSessionNotice] = useState(false);
+  const [shuffledNotice, setShuffledNotice] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
 
-  // Subscribe to live updates as participants submit answers in real time
+  // Sync from server on mount and periodically every 5 seconds
+  useEffect(() => {
+    const fetchFreshData = async () => {
+      await debriefingService.syncFromServer();
+      setStats(debriefingService.getDebriefStats(selectedSession));
+    };
+
+    fetchFreshData();
+    const interval = setInterval(fetchFreshData, 5000);
+    return () => clearInterval(interval);
+  }, [selectedSession]);
+
+  // Subscribe to local/broadcast events
   useEffect(() => {
     const unsubscribe = debriefingService.onUpdate(() => {
-      setStats(debriefingService.getDebriefStats());
+      setStats(debriefingService.getDebriefStats(selectedSession));
     });
     return () => unsubscribe();
-  }, []);
+  }, [selectedSession]);
 
-  const handleSeedClassroom = () => {
-    debriefingService.seedSampleClassroom(26);
-    setStats(debriefingService.getDebriefStats());
+  const handleSelectSessionTab = (sessionId: ClassroomSessionId | 'all') => {
+    setSelectedSession(sessionId);
+    setStats(debriefingService.getDebriefStats(sessionId));
   };
 
-  const handleResetSession = () => {
-    debriefingService.clearSubmissions();
-    setStats(debriefingService.getDebriefStats());
+  const handleSetActiveSessionForStudents = (sessionId: ClassroomSessionId) => {
+    debriefingService.setActiveSessionId(sessionId);
+    setActiveSessionNotice(true);
+    setTimeout(() => setActiveSessionNotice(false), 3000);
+  };
+
+  const handleShuffleCasesFromTeacher = () => {
+    // Shuffling from teacher area
+    setShuffledNotice(true);
+    setTimeout(() => setShuffledNotice(false), 2500);
+  };
+
+  const handleSeedClassroom = () => {
+    if (selectedSession === 'all') {
+      debriefingService.seedSampleClassroom('27_ottobre_mattina', 26);
+    } else {
+      debriefingService.seedSampleClassroom(selectedSession, 26);
+    }
+    setStats(debriefingService.getDebriefStats(selectedSession));
+  };
+
+  const handleResetConfirmed = () => {
+    if (resetTarget === 'all') {
+      debriefingService.clearSubmissions('all');
+    } else {
+      debriefingService.clearSubmissions(selectedSession);
+    }
+    setStats(debriefingService.getDebriefStats(selectedSession));
     setConfirmResetOpen(false);
+  };
+
+  const handleManualSync = async () => {
+    setIsSyncing(true);
+    await debriefingService.syncFromServer();
+    setStats(debriefingService.getDebriefStats(selectedSession));
+    setTimeout(() => setIsSyncing(false), 500);
   };
 
   const handlePrint = () => {
@@ -72,13 +125,13 @@ export const TeacherDebriefing: React.FC<TeacherDebriefingProps> = ({ onLogout }
 
   const displayCases = [...stats.cases].sort((a, b) => {
     if (sortByCritical) {
-      // Show lowest accuracy first (most critical cases)
       return a.correctPercentage - b.correctPercentage;
     }
-    return 0; // Natural order
+    return 0;
   });
 
   const activePresentationCase = stats.cases[presentationCaseIndex] || stats.cases[0];
+  const activeSessionGlobal = debriefingService.getActiveSessionId();
 
   // ==========================================
   // PRESENTATION / PROJECTOR MODE VIEW
@@ -87,11 +140,10 @@ export const TeacherDebriefing: React.FC<TeacherDebriefingProps> = ({ onLogout }
     const c = activePresentationCase;
     return (
       <div className="fixed inset-0 z-50 bg-slate-950 text-white flex flex-col p-6 sm:p-12 overflow-y-auto">
-        {/* Presentation Header */}
         <div className="flex items-center justify-between border-b border-slate-800 pb-4 mb-6">
           <div className="flex items-center gap-3">
             <span className="font-mono text-xs font-bold uppercase tracking-wider text-teal-400 bg-teal-950/80 px-2.5 py-1 rounded border border-teal-800">
-              Restituzione d'Aula · Debriefing
+              Restituzione d'Aula · {stats.sessionLabel}
             </span>
             <span className="text-sm font-semibold text-slate-300">
               Caso {presentationCaseIndex + 1} di {stats.cases.length}
@@ -100,7 +152,7 @@ export const TeacherDebriefing: React.FC<TeacherDebriefingProps> = ({ onLogout }
 
           <div className="flex items-center gap-3">
             <span className="text-xs text-slate-400 hidden sm:inline">
-              Usa frecce ← → o Spazio per scorrere
+              Frecce ← → per scorrere
             </span>
             <button
               onClick={() => setPresentationMode(false)}
@@ -112,7 +164,6 @@ export const TeacherDebriefing: React.FC<TeacherDebriefingProps> = ({ onLogout }
           </div>
         </div>
 
-        {/* Slide Stage */}
         <div className="flex-1 max-w-5xl mx-auto w-full flex flex-col justify-between py-4">
           <div>
             <div className="flex items-center gap-3 mb-2">
@@ -120,28 +171,26 @@ export const TeacherDebriefing: React.FC<TeacherDebriefingProps> = ({ onLogout }
                 Canale: {c.context}
               </span>
               <span className="text-xs text-slate-400 font-mono">
-                Risposte raccolte: {c.totalAnswers}
+                Risposte aula: {c.totalAnswers}
               </span>
             </div>
             <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight mb-4">
               {c.title}
             </h2>
 
-            {/* Dilemma quote box */}
             <div className="bg-slate-900 p-5 rounded-2xl border border-slate-800 mb-8">
               <span className="text-[11px] uppercase tracking-wider text-slate-400 font-bold block mb-1">
-                La situazione analizzata dall'aula:
+                La situazione analizzata:
               </span>
               <p className="text-base sm:text-lg text-teal-100 font-serif italic leading-relaxed">
                 {c.quote}
               </p>
             </div>
 
-            {/* Collective Classroom Response Bars */}
             <div className="mb-8 bg-slate-900/60 p-6 rounded-2xl border border-slate-800/80">
               <div className="flex justify-between items-center mb-4">
                 <span className="text-xs uppercase tracking-wider font-bold text-slate-300">
-                  Distribuzione delle Risposte dell'Aula
+                  Distribuzione delle Risposte in Quest'Aula
                 </span>
                 <span className="text-xs font-bold text-emerald-400 bg-emerald-950/60 px-2.5 py-1 rounded border border-emerald-800">
                   Risposta Corretta: {c.correctCategory} ({c.correctPercentage}%)
@@ -223,7 +272,6 @@ export const TeacherDebriefing: React.FC<TeacherDebriefingProps> = ({ onLogout }
               </div>
             </div>
 
-            {/* Teaching Debrief Box for Classroom Discussion */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
               <div className="bg-slate-900 p-4 rounded-xl border border-slate-800">
                 <span className="text-amber-400 font-bold block mb-1 uppercase tracking-wide">
@@ -241,7 +289,6 @@ export const TeacherDebriefing: React.FC<TeacherDebriefingProps> = ({ onLogout }
             </div>
           </div>
 
-          {/* Slide Navigation footer */}
           <div className="flex items-center justify-between pt-6 mt-6 border-t border-slate-800">
             <button
               onClick={() => setPresentationCaseIndex((prev) => Math.max(0, prev - 1))}
@@ -283,21 +330,31 @@ export const TeacherDebriefing: React.FC<TeacherDebriefingProps> = ({ onLogout }
           <div>
             <div className="flex items-center gap-2 text-xs font-bold text-teal-800 mb-1">
               <Lock className="w-3.5 h-3.5" />
-              <span>Area Riservata Docente · Pietro Citarella</span>
+              <span>Area Riservata Docente · Pietro Citarella (PIN: 2204)</span>
               <span aria-hidden="true">·</span>
-              <span className="text-slate-500 font-normal">Risposte Anonime & Debriefing</span>
+              <span className="text-slate-500 font-normal">Gestione 4 Aule (27-28 Ottobre)</span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
-              Dashboard di Restituzione & Debriefing d'Aula
+              Dashboard Restituzione Debriefing
             </h1>
             <p className="text-xs sm:text-sm text-slate-600 mt-1 max-w-2xl leading-relaxed">
-              Visualizza in tempo reale le risposte anonime dei corsisti al Laboratorio Casi Pratici,
-              analizza gli errori più diffusi e guida la discussione finale al termine della lezione.
+              I risultati anonimi dei partecipanti sono separati e archiviati per ciascuna delle tue 4
+              lezioni (mattina e pomeriggio del 27 e 28 ottobre).
             </p>
           </div>
 
           {/* Action buttons */}
           <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
+            <button
+              onClick={handleManualSync}
+              disabled={isSyncing}
+              className="inline-flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition-colors border border-slate-200"
+              title="Aggiorna risposte dal server in tempo reale"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin text-teal-700' : ''}`} />
+              <span>Aggiorna Dati</span>
+            </button>
+
             <button
               onClick={() => {
                 setPresentationCaseIndex(0);
@@ -307,7 +364,7 @@ export const TeacherDebriefing: React.FC<TeacherDebriefingProps> = ({ onLogout }
               title="Apri modalità schermo intero per proiettore o LIM"
             >
               <Maximize2 className="w-3.5 h-3.5 text-teal-400" />
-              <span>Modalità Proiettore / LIM</span>
+              <span>Proiettore / LIM</span>
             </button>
 
             <button
@@ -324,7 +381,118 @@ export const TeacherDebriefing: React.FC<TeacherDebriefingProps> = ({ onLogout }
               title="Esci dall'area riservata docente"
             >
               <LogOut className="w-3.5 h-3.5" />
-              <span>Blocca / Esci</span>
+              <span>Esci</span>
+            </button>
+          </div>
+        </div>
+
+        {/* 4 Classrooms Tab Switcher */}
+        <div className="pt-6">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <Calendar className="w-4 h-4 text-teal-800" />
+              <span className="text-xs font-bold text-slate-900 uppercase tracking-wide">
+                Seleziona l'Aula da Esaminare:
+              </span>
+            </div>
+            {selectedSession !== 'all' && (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => handleSetActiveSessionForStudents(selectedSession)}
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold border transition-all ${
+                    activeSessionGlobal === selectedSession
+                      ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+                      : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
+                  }`}
+                  title="Imposta questa aula come predefinita per tutti i corsisti che aprono l'app"
+                >
+                  {activeSessionGlobal === selectedSession ? (
+                    <>
+                      <Check className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>Aula Attualmente Attiva per i Corsisti</span>
+                    </>
+                  ) : (
+                    <span>Imposta come Aula Attiva per l'Esercitazione</span>
+                  )}
+                </button>
+              </div>
+            )}
+          </div>
+
+          {activeSessionNotice && (
+            <div className="mb-3 p-2.5 bg-emerald-50 border border-emerald-200 rounded-lg text-xs text-emerald-800 flex items-center gap-2 animate-fadeIn">
+              <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span>
+                Aula impostata con successo! I corsisti che apriranno l'app invieranno le risposte in
+                questa sessione.
+              </span>
+            </div>
+          )}
+
+          {/* Classroom Selector Pills */}
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+            {CLASSROOM_SESSIONS.map((session) => {
+              const isSelected = selectedSession === session.id;
+              const isGlobalActive = activeSessionGlobal === session.id;
+
+              return (
+                <button
+                  key={session.id}
+                  onClick={() => handleSelectSessionTab(session.id)}
+                  className={`p-3 rounded-xl border text-left transition-all relative ${
+                    isSelected
+                      ? 'bg-teal-900 text-white border-teal-900 shadow-sm'
+                      : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100 hover:border-slate-300'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <span
+                      className={`text-[10px] font-bold uppercase tracking-wider ${
+                        isSelected ? 'text-teal-200' : 'text-slate-500'
+                      }`}
+                    >
+                      {session.day}
+                    </span>
+                    {isGlobalActive && (
+                      <span className="w-2 h-2 rounded-full bg-emerald-400" title="Aula Attiva" />
+                    )}
+                  </div>
+                  <span className="font-bold text-xs block leading-tight">{session.slot}</span>
+                  <span
+                    className={`text-[10px] font-mono mt-0.5 block ${
+                      isSelected ? 'text-teal-200' : 'text-slate-500'
+                    }`}
+                  >
+                    {session.time}
+                  </span>
+                </button>
+              );
+            })}
+
+            {/* All sessions combined tab */}
+            <button
+              onClick={() => handleSelectSessionTab('all')}
+              className={`p-3 rounded-xl border text-left transition-all ${
+                selectedSession === 'all'
+                  ? 'bg-teal-900 text-white border-teal-900 shadow-sm'
+                  : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+              }`}
+            >
+              <span
+                className={`text-[10px] font-bold uppercase tracking-wider block mb-1 ${
+                  selectedSession === 'all' ? 'text-teal-200' : 'text-slate-500'
+                }`}
+              >
+                Riepilogo Generale
+              </span>
+              <span className="font-bold text-xs block leading-tight">Tutte le 4 Aule</span>
+              <span
+                className={`text-[10px] mt-0.5 block ${
+                  selectedSession === 'all' ? 'text-teal-200' : 'text-slate-500'
+                }`}
+              >
+                Dati complessivi
+              </span>
             </button>
           </div>
         </div>
@@ -338,7 +506,9 @@ export const TeacherDebriefing: React.FC<TeacherDebriefingProps> = ({ onLogout }
             <span className="font-mono text-2xl font-extrabold text-slate-900 mt-1 block">
               {stats.totalParticipantsEstimated}
             </span>
-            <span className="text-[11px] text-slate-500 mt-0.5 block">Discenti in sessione</span>
+            <span className="text-[11px] text-slate-500 mt-0.5 block">
+              In quest'aula ({stats.sessionLabel.split('(')[0].trim()})
+            </span>
           </div>
 
           <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
@@ -383,18 +553,18 @@ export const TeacherDebriefing: React.FC<TeacherDebriefingProps> = ({ onLogout }
               }`}
             >
               {stats.totalSubmissions === 0
-                ? 'In attesa voti'
+                ? 'Nessun voto ancora'
                 : stats.overallAccuracy >= 75
                 ? 'Basso (Aula Preparata)'
                 : stats.overallAccuracy >= 60
                 ? 'Moderato (Dubbi Frequenti)'
                 : 'Elevato (Focus Necessario)'}
             </span>
-            <span className="text-[11px] text-slate-500 mt-0.5 block">Consapevolezza collettiva</span>
+            <span className="text-[11px] text-slate-500 mt-0.5 block">Clima decisionale</span>
           </div>
         </div>
 
-        {/* Tools bar for Pietro */}
+        {/* Teacher Private Tools & Reset actions */}
         <div className="flex flex-wrap items-center justify-between gap-3 pt-6 mt-6 border-t border-slate-200 text-xs">
           <div className="flex items-center gap-2">
             <button
@@ -407,57 +577,114 @@ export const TeacherDebriefing: React.FC<TeacherDebriefingProps> = ({ onLogout }
             >
               <ArrowUpDown className="w-3.5 h-3.5" />
               <span>
-                {sortByCritical ? 'Ordinato per: Casi più Critici' : 'Ordina per: Più Critici prima'}
+                {sortByCritical ? 'Ordinato per: Più Critici prima' : 'Ordina per: Più Critici prima'}
               </span>
             </button>
           </div>
 
-          <div className="flex items-center gap-2">
-            {stats.totalSubmissions === 0 && (
-              <button
-                onClick={handleSeedClassroom}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 rounded-lg font-semibold transition-colors"
-                title="Genera dati realistici di 26 discenti per testare o mostrare la simulazione"
-              >
-                <Sparkles className="w-3.5 h-3.5 text-teal-600" />
-                <span>Simula Gruppo d'Aula (26 discenti)</span>
-              </button>
-            )}
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Seed mock participants for the selected classroom */}
+            <button
+              onClick={handleSeedClassroom}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 rounded-lg font-semibold transition-colors"
+              title="Genera dati realistici di 26 discenti per testare o mostrare la simulazione in quest'aula"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-teal-600" />
+              <span>Simula Voti di Prova (26 discenti)</span>
+            </button>
 
-            {stats.totalSubmissions > 0 && (
-              <button
-                onClick={() => setConfirmResetOpen(true)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-700 border border-slate-200 hover:border-rose-300 rounded-lg transition-colors"
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
-                <span>Nuova Classe / Azzera Dati</span>
-              </button>
-            )}
+            {/* Reset button with options */}
+            <button
+              onClick={() => {
+                setResetTarget('current');
+                setConfirmResetOpen(true);
+              }}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg font-semibold transition-colors"
+              title="Azzera le risposte per le prove prima del corso"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>Azzera Risposte (Prove)</span>
+            </button>
           </div>
         </div>
       </div>
 
-      {/* Confirmation Modal for Reset */}
+      {/* Confirmation Modal for Resetting */}
       {confirmResetOpen && (
         <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-xl max-w-sm w-full p-5 border border-slate-200">
-            <h4 className="font-bold text-slate-900 text-sm mb-2">Azzerare i dati della sessione?</h4>
+          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6 border border-slate-200">
+            <h4 className="font-bold text-slate-900 text-base mb-2">
+              Azzeramento Risposte (Gestione Prove)
+            </h4>
             <p className="text-xs text-slate-600 mb-4 leading-relaxed">
-              Tutte le {stats.totalSubmissions} risposte anonime raccolte verranno cancellate per avviare
-              una nuova classe da zero.
+              Puoi azzerare le risposte raccolte per effettuare nuove prove senza sporcare le altre
+              sessioni d'aula.
             </p>
+
+            <div className="space-y-2 mb-6">
+              <label
+                onClick={() => setResetTarget('current')}
+                className={`p-3 rounded-xl border flex items-center gap-3 cursor-pointer transition-all ${
+                  resetTarget === 'current'
+                    ? 'bg-teal-50 border-teal-500 ring-1 ring-teal-500'
+                    : 'bg-slate-50 border-slate-200'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="resetOption"
+                  checked={resetTarget === 'current'}
+                  onChange={() => setResetTarget('current')}
+                  className="text-teal-700"
+                />
+                <div>
+                  <span className="font-bold text-xs block text-slate-900">
+                    Azzera solo quest'aula: {stats.sessionLabel}
+                  </span>
+                  <span className="text-[11px] text-slate-500">
+                    Cancella solo le risposte raccolte per questa specifica sessione.
+                  </span>
+                </div>
+              </label>
+
+              <label
+                onClick={() => setResetTarget('all')}
+                className={`p-3 rounded-xl border flex items-center gap-3 cursor-pointer transition-all ${
+                  resetTarget === 'all'
+                    ? 'bg-rose-50 border-rose-500 ring-1 ring-rose-500'
+                    : 'bg-slate-50 border-slate-200'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="resetOption"
+                  checked={resetTarget === 'all'}
+                  onChange={() => setResetTarget('all')}
+                  className="text-rose-700"
+                />
+                <div>
+                  <span className="font-bold text-xs block text-rose-900">
+                    Azzera TUTTE le 4 aule contemporaneamente
+                  </span>
+                  <span className="text-[11px] text-slate-500">
+                    Pulisce l'intero database di tutte le lezioni del 27 e 28 ottobre.
+                  </span>
+                </div>
+              </label>
+            </div>
+
             <div className="flex justify-end gap-2">
               <button
                 onClick={() => setConfirmResetOpen(false)}
-                className="px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+                className="px-4 py-2 rounded-lg border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50"
               >
                 Annulla
               </button>
               <button
-                onClick={handleResetSession}
-                className="px-3 py-1.5 rounded-lg bg-rose-700 hover:bg-rose-800 text-xs font-semibold text-white shadow-sm"
+                onClick={handleResetConfirmed}
+                className="px-4 py-2 rounded-lg bg-rose-700 hover:bg-rose-800 text-xs font-bold text-white shadow-sm"
               >
-                Sì, Azzera Dati
+                Conferma Azzeramento
               </button>
             </div>
           </div>
@@ -467,12 +694,15 @@ export const TeacherDebriefing: React.FC<TeacherDebriefingProps> = ({ onLogout }
       {/* Case by Case Breakdown List */}
       <div className="space-y-6">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-bold text-slate-900">
-            Analisi Dettagliata per Caso (8 Dilemmi Pratici)
-          </h2>
-          <span className="text-xs text-slate-500">
-            Dati sincronizzati in tempo reale
-          </span>
+          <div className="flex items-center gap-2">
+            <h2 className="text-lg font-bold text-slate-900">
+              Analisi dei Risultati: {stats.sessionLabel}
+            </h2>
+            <span className="text-xs text-teal-800 bg-teal-50 px-2.5 py-0.5 rounded border border-teal-200 font-medium">
+              {stats.totalSubmissions} voti totali
+            </span>
+          </div>
+          <span className="text-xs text-slate-500">Sincronizzazione in tempo reale attiva</span>
         </div>
 
         {displayCases.map((c, index) => {
@@ -493,9 +723,7 @@ export const TeacherDebriefing: React.FC<TeacherDebriefingProps> = ({ onLogout }
                 </div>
 
                 <div className="flex items-center gap-3">
-                  <span className="text-xs text-slate-500 font-mono">
-                    {c.totalAnswers} voti
-                  </span>
+                  <span className="text-xs text-slate-500 font-mono">{c.totalAnswers} voti</span>
                   <span
                     className={`text-xs font-bold px-2.5 py-1 rounded-md uppercase tracking-wider ${
                       c.correctPercentage >= 70
@@ -519,7 +747,7 @@ export const TeacherDebriefing: React.FC<TeacherDebriefingProps> = ({ onLogout }
               <div className="mb-6 bg-slate-50/80 p-4 rounded-xl border border-slate-200">
                 <div className="flex justify-between items-center mb-3">
                   <span className="text-xs font-bold text-slate-800 uppercase tracking-wide">
-                    Distribuzione Risposte dell'Aula:
+                    Distribuzione Risposte in Quest'Aula:
                   </span>
                   <span className="text-xs font-bold text-slate-700">
                     Risposta Corretta: <strong className="text-teal-900">{c.correctCategory}</strong>

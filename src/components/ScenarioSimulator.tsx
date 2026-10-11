@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
-import { TrafficLightCase } from '../types';
+import React, { useState, useEffect } from 'react';
+import { TrafficLightCase, ClassroomSessionId } from '../types';
 import { TRAFFIC_LIGHT_CASES } from '../data/courseData';
-import { debriefingService } from '../services/debriefingService';
+import { debriefingService, CLASSROOM_SESSIONS } from '../services/debriefingService';
 import {
   CheckCircle2,
   AlertTriangle,
@@ -11,22 +11,98 @@ import {
   Sparkles,
   HelpCircle,
   ThumbsUp,
+  Calendar,
 } from 'lucide-react';
+
+// Helper function to smartly shuffle and interleave cases so Verde, Giallo and Rosso don't repeat consecutively
+function smartShuffleCases(casesList: TrafficLightCase[]): TrafficLightCase[] {
+  const shuffleArray = <T,>(arr: T[]): T[] => {
+    const copy = [...arr];
+    for (let i = copy.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [copy[i], copy[j]] = [copy[j], copy[i]];
+    }
+    return copy;
+  };
+
+  const greens = shuffleArray(casesList.filter((c) => c.category === 'Verde'));
+  const yellows = shuffleArray(casesList.filter((c) => c.category === 'Giallo'));
+  const reds = shuffleArray(casesList.filter((c) => c.category === 'Rosso'));
+
+  const result: TrafficLightCase[] = [];
+  const maxLen = Math.max(greens.length, yellows.length, reds.length);
+
+  // Randomize initial starting color sequence to prevent any predictability
+  const orders: ('Verde' | 'Giallo' | 'Rosso')[][] = [
+    ['Verde', 'Rosso', 'Giallo'],
+    ['Giallo', 'Verde', 'Rosso'],
+    ['Rosso', 'Giallo', 'Verde'],
+    ['Verde', 'Giallo', 'Rosso'],
+    ['Giallo', 'Rosso', 'Verde'],
+    ['Rosso', 'Verde', 'Giallo'],
+  ];
+  const chosenOrder = orders[Math.floor(Math.random() * orders.length)];
+
+  for (let i = 0; i < maxLen; i++) {
+    for (const cat of chosenOrder) {
+      if (cat === 'Verde' && greens.length > 0) result.push(greens.pop()!);
+      if (cat === 'Giallo' && yellows.length > 0) result.push(yellows.pop()!);
+      if (cat === 'Rosso' && reds.length > 0) result.push(reds.pop()!);
+    }
+  }
+
+  // Append any leftovers
+  while (greens.length > 0) result.push(greens.pop()!);
+  while (yellows.length > 0) result.push(yellows.pop()!);
+  while (reds.length > 0) result.push(reds.pop()!);
+
+  return result;
+}
 
 export const ScenarioSimulator: React.FC = () => {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [userChoice, setUserChoice] = useState<'Verde' | 'Giallo' | 'Rosso' | null>(null);
   const [solvedCases, setSolvedCases] = useState<Record<string, { choice: string; isCorrect: boolean }>>({});
   const [selectedContext, setSelectedContext] = useState<string>('All');
+  const [currentSessionId, setCurrentSessionId] = useState<ClassroomSessionId>(() =>
+    debriefingService.getActiveSessionId()
+  );
+  const [activeCasesList, setActiveCasesList] = useState<TrafficLightCase[]>(() =>
+    smartShuffleCases(TRAFFIC_LIGHT_CASES)
+  );
 
   const contexts = ['All', 'Bacheca Pubblica', 'Gruppo WhatsApp', 'LinkedIn', 'Foto & Storie', 'Commenti ai Media'];
 
-  const filteredCases = TRAFFIC_LIGHT_CASES.filter((c) => {
-    if (selectedContext === 'All') return true;
-    return c.context === selectedContext;
-  });
+  // Listen to active session changes from teacher
+  useEffect(() => {
+    const unsub = debriefingService.onUpdate(() => {
+      setCurrentSessionId(debriefingService.getActiveSessionId());
+    });
+    return () => unsub();
+  }, []);
 
-  const activeCase = filteredCases[currentIndex] || filteredCases[0];
+  // When context filter changes, update and shuffle
+  useEffect(() => {
+    let pool = TRAFFIC_LIGHT_CASES;
+    if (selectedContext !== 'All') {
+      pool = TRAFFIC_LIGHT_CASES.filter((c) => c.context === selectedContext);
+    }
+    setActiveCasesList(smartShuffleCases(pool));
+    setCurrentIndex(0);
+    setUserChoice(null);
+  }, [selectedContext]);
+
+  const handleShuffleCases = () => {
+    let pool = TRAFFIC_LIGHT_CASES;
+    if (selectedContext !== 'All') {
+      pool = TRAFFIC_LIGHT_CASES.filter((c) => c.context === selectedContext);
+    }
+    setActiveCasesList(smartShuffleCases(pool));
+    setCurrentIndex(0);
+    setUserChoice(null);
+  };
+
+  const activeCase = activeCasesList[currentIndex] || activeCasesList[0];
 
   const handleSelectCategory = (choice: 'Verde' | 'Giallo' | 'Rosso') => {
     if (userChoice !== null) return; // already answered
@@ -36,13 +112,13 @@ export const ScenarioSimulator: React.FC = () => {
       ...prev,
       [activeCase.id]: { choice, isCorrect },
     }));
-    // Record anonymous answer for classroom debriefing
-    debriefingService.recordAnswer(activeCase.id, choice);
+    // Record anonymous answer for classroom debriefing in the active classroom session
+    debriefingService.recordAnswer(activeCase.id, choice, currentSessionId);
   };
 
   const handleNext = () => {
     setUserChoice(null);
-    if (currentIndex < filteredCases.length - 1) {
+    if (currentIndex < activeCasesList.length - 1) {
       setCurrentIndex((prev) => prev + 1);
     } else {
       setCurrentIndex(0);
@@ -53,6 +129,7 @@ export const ScenarioSimulator: React.FC = () => {
     setUserChoice(null);
     setCurrentIndex(0);
     setSolvedCases({});
+    handleShuffleCases();
   };
 
   const totalAnswered = Object.keys(solvedCases).length;
@@ -102,26 +179,44 @@ export const ScenarioSimulator: React.FC = () => {
           </div>
         </div>
 
-        {/* Filter by context */}
-        <div className="flex items-center gap-2 overflow-x-auto pt-4 mt-4 border-t border-slate-100 text-xs">
-          <span className="font-medium text-slate-600 shrink-0">Filtra per canale:</span>
-          {contexts.map((ctx) => (
-            <button
-              key={ctx}
-              onClick={() => {
-                setSelectedContext(ctx);
-                setCurrentIndex(0);
-                setUserChoice(null);
-              }}
-              className={`px-3 py-1 rounded-md whitespace-nowrap transition-colors ${
-                selectedContext === ctx
-                  ? 'bg-teal-800 text-white font-semibold'
-                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-              }`}
+        {/* Filter by context and Classroom session */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-4 mt-4 border-t border-slate-100 text-xs">
+          <div className="flex items-center gap-1.5 overflow-x-auto">
+            <span className="font-medium text-slate-600 shrink-0">Filtra per canale:</span>
+            {contexts.map((ctx) => (
+              <button
+                key={ctx}
+                onClick={() => {
+                  setSelectedContext(ctx);
+                  setCurrentIndex(0);
+                  setUserChoice(null);
+                }}
+                className={`px-3 py-1 rounded-md whitespace-nowrap transition-colors ${
+                  selectedContext === ctx
+                    ? 'bg-teal-800 text-white font-semibold'
+                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                }`}
+              >
+                {ctx === 'All' ? 'Tutti i Canali' : ctx}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex items-center gap-1.5 bg-teal-50/80 text-teal-900 px-3 py-1 rounded-lg border border-teal-200/80 shrink-0">
+            <Calendar className="w-3.5 h-3.5 text-teal-800 shrink-0" />
+            <span className="font-semibold text-slate-600">Aula:</span>
+            <select
+              value={currentSessionId}
+              onChange={(e) => setCurrentSessionId(e.target.value as ClassroomSessionId)}
+              className="bg-transparent font-bold text-teal-950 border-none focus:outline-none cursor-pointer text-xs"
             >
-              {ctx === 'All' ? 'Tutti i Canali' : ctx}
-            </button>
-          ))}
+              {CLASSROOM_SESSIONS.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.label}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
 
@@ -131,7 +226,7 @@ export const ScenarioSimulator: React.FC = () => {
           <div className="flex items-center justify-between text-xs text-slate-500 mb-4 pb-3 border-b border-slate-100">
             <div className="flex items-center gap-2">
               <span className="font-bold text-teal-800">
-                Caso {currentIndex + 1} di {filteredCases.length}
+                Caso {currentIndex + 1} di {activeCasesList.length}
               </span>
               <span aria-hidden="true">·</span>
               <span>Canale: {activeCase.context}</span>

@@ -21,7 +21,12 @@ export const TeacherAuthModal: React.FC<TeacherAuthModalProps> = ({
   if (!isOpen) return null;
 
   const getStoredPin = () => {
-    return localStorage.getItem(PIN_STORAGE_KEY) || '1234';
+    const stored = localStorage.getItem(PIN_STORAGE_KEY);
+    if (!stored || stored === '1234') {
+      localStorage.setItem(PIN_STORAGE_KEY, '2204');
+      return '2204';
+    }
+    return stored;
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -74,7 +79,7 @@ export const TeacherAuthModal: React.FC<TeacherAuthModalProps> = ({
                   setPin(e.target.value);
                   setError(false);
                 }}
-                placeholder="PIN (es. 1234)"
+                placeholder="PIN (es. 2204)"
                 autoFocus
                 className={`w-full text-center text-lg tracking-widest font-mono p-2.5 rounded-lg border ${
                   error
@@ -97,7 +102,7 @@ export const TeacherAuthModal: React.FC<TeacherAuthModalProps> = ({
               </p>
             )}
             <p className="text-[11px] text-slate-400 mt-1.5 text-center">
-              (PIN predefinito per il corso: <strong className="text-slate-600">1234</strong>)
+              (PIN riservato per il formatore: <strong className="text-slate-600 font-mono">2204</strong>)
             </p>
           </div>
 

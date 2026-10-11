@@ -3,13 +3,10 @@ import {
   CORE_PRINCIPLES,
   CANONS_DATA,
   CONTEXT_COMPARISON,
-  TRAFFIC_LIGHT_CASES,
   VADEMECUM_ROWS,
 } from '../data/courseData';
 import {
   RiskLevelsChart,
-  SourcesDoughnutChart,
-  ResponsibilityStackChart,
 } from './InteractiveCharts';
 import {
   MessageSquare,
@@ -40,7 +37,6 @@ export const GuideSection: React.FC<GuideSectionProps> = ({
   onOpenVademecum,
 }) => {
   const [selectedCanon, setSelectedCanon] = useState<number | null>(1);
-  const [trafficFilter, setTrafficFilter] = useState<'All' | 'Verde' | 'Giallo' | 'Rosso'>('All');
   const [vademecumSearch, setVademecumSearch] = useState('');
   const [expandedRow, setExpandedRow] = useState<number | null>(null);
 
@@ -66,11 +62,6 @@ export const GuideSection: React.FC<GuideSectionProps> = ({
   };
 
   const riskScore = calculateQuickRisk();
-
-  const filteredTrafficCases = TRAFFIC_LIGHT_CASES.filter((c) => {
-    if (trafficFilter === 'All') return true;
-    return c.category === trafficFilter;
-  });
 
   const filteredVademecum = VADEMECUM_ROWS.filter(
     (row) =>
@@ -475,288 +466,77 @@ export const GuideSection: React.FC<GuideSectionProps> = ({
           </div>
         </div>
 
-        {/* 4 Canons & Sources Donut */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-          <div className="lg:col-span-6 space-y-4">
-            <div className="flex items-center justify-between">
+        {/* 4 Canons of Conscious Communication */}
+        <div className="space-y-4 pt-2">
+          <div className="flex items-center justify-between">
+            <div>
               <h3 className="text-base font-bold text-slate-900">
                 I Quattro Canoni della Comunicazione Consapevole
               </h3>
-              <span className="text-xs text-slate-500">Seleziona per dettagli</span>
+              <p className="text-xs text-slate-500 mt-0.5">
+                I principi guida stabiliti dal Codice di Comportamento per ogni interazione online
+              </p>
             </div>
-
-            <div className="space-y-3">
-              {CANONS_DATA.map((canon) => {
-                const isSelected = selectedCanon === canon.id;
-                return (
-                  <div
-                    key={canon.id}
-                    onClick={() => setSelectedCanon(isSelected ? null : canon.id)}
-                    className={`p-4 rounded-xl border transition-all cursor-pointer ${
-                      isSelected
-                        ? 'bg-teal-50/50 border-teal-500 shadow-sm'
-                        : 'bg-white border-slate-200 hover:border-slate-300'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="w-6 h-6 rounded-full bg-teal-800 text-white flex items-center justify-center text-xs font-bold font-mono">
-                          {canon.id}
-                        </span>
-                        <h4 className="font-bold text-slate-900 text-sm">{canon.title}</h4>
-                      </div>
-                      <span className="text-[11px] font-semibold text-teal-800 bg-teal-100/60 px-2 py-0.5 rounded">
-                        {canon.badge}
-                      </span>
-                    </div>
-
-                    <p className="text-xs text-slate-600 mt-2 leading-relaxed">
-                      {canon.description}
-                    </p>
-
-                    {isSelected && (
-                      <div className="mt-3 pt-3 border-t border-teal-200/60 text-xs text-teal-900 bg-white/80 p-2.5 rounded-lg animate-fadeIn">
-                        <strong>Consiglio pratico in servizio: </strong>
-                        {canon.practicalTip}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
+            <span className="text-xs text-slate-400">Tocca per visualizzare il consiglio pratico</span>
           </div>
 
-          <div className="lg:col-span-6">
-            <SourcesDoughnutChart />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {CANONS_DATA.map((canon) => {
+              const isSelected = selectedCanon === canon.id;
+              return (
+                <div
+                  key={canon.id}
+                  onClick={() => setSelectedCanon(isSelected ? null : canon.id)}
+                  className={`p-5 rounded-xl border transition-all cursor-pointer ${
+                    isSelected
+                      ? 'bg-teal-50/50 border-teal-500 shadow-sm'
+                      : 'bg-white border-slate-200 hover:border-slate-300'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <span className="w-6 h-6 rounded-full bg-teal-800 text-white flex items-center justify-center text-xs font-bold font-mono">
+                        {canon.id}
+                      </span>
+                      <h4 className="font-bold text-slate-900 text-sm">{canon.title}</h4>
+                    </div>
+                    <span className="text-[11px] font-semibold text-teal-800 bg-teal-100/60 px-2 py-0.5 rounded">
+                      {canon.badge}
+                    </span>
+                  </div>
+
+                  <p className="text-xs text-slate-600 mt-2.5 leading-relaxed">
+                    {canon.description}
+                  </p>
+
+                  {isSelected ? (
+                    <div className="mt-3 pt-3 border-t border-teal-200/60 text-xs text-teal-900 bg-white/90 p-3 rounded-lg animate-fadeIn">
+                      <strong className="block mb-0.5 text-teal-950">Consiglio pratico in servizio:</strong>
+                      <span>{canon.practicalTip}</span>
+                    </div>
+                  ) : (
+                    <span className="block mt-2 text-[11px] text-teal-700 font-medium">
+                      + Mostra consiglio pratico
+                    </span>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
       </section>
 
-      {/* 03. Semaforo della Condotta Online */}
+      {/* 03. Vademecum del Dipendente Consapevole */}
       <section className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 sm:p-8">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
           <div>
             <div className="flex items-center gap-2 text-xs text-teal-700 font-semibold mb-1">
               <span>Modulo 3</span>
               <span aria-hidden="true">·</span>
-              <span>Casi Operativi e Responsabilità</span>
-            </div>
-            <h2 className="text-2xl font-extrabold text-slate-900 tracking-tight">
-              3. Semaforo della Condotta Online
-            </h2>
-            <p className="text-slate-600 text-sm mt-1">
-              Esempi quotidiani concreti: cosa è pienamente consentito, cosa richiede cautela e cosa è vietato.
-            </p>
-          </div>
-
-          {/* Traffic light category filter buttons */}
-          <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-lg">
-            <button
-              onClick={() => setTrafficFilter('All')}
-              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                trafficFilter === 'All'
-                  ? 'bg-white text-slate-900 shadow-sm font-bold'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              Tutti
-            </button>
-            <button
-              onClick={() => setTrafficFilter('Verde')}
-              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                trafficFilter === 'Verde'
-                  ? 'bg-emerald-600 text-white shadow-sm font-bold'
-                  : 'text-emerald-700 hover:text-emerald-900'
-              }`}
-            >
-              Verde
-            </button>
-            <button
-              onClick={() => setTrafficFilter('Giallo')}
-              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                trafficFilter === 'Giallo'
-                  ? 'bg-amber-500 text-white shadow-sm font-bold'
-                  : 'text-amber-700 hover:text-amber-900'
-              }`}
-            >
-              Giallo
-            </button>
-            <button
-              onClick={() => setTrafficFilter('Rosso')}
-              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                trafficFilter === 'Rosso'
-                  ? 'bg-rose-600 text-white shadow-sm font-bold'
-                  : 'text-rose-700 hover:text-rose-900'
-              }`}
-            >
-              Rosso
-            </button>
-          </div>
-        </div>
-
-        {/* Spotlight Banner to Interactive Cases Laboratory */}
-        <div className="bg-gradient-to-r from-amber-500/10 via-teal-500/10 to-emerald-500/10 border border-teal-300/60 rounded-xl p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6 shadow-xs">
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <Sparkles className="w-4 h-4 text-amber-600" />
-              <span className="text-[11px] font-bold uppercase tracking-wider text-teal-900 bg-white/90 px-2 py-0.5 rounded border border-teal-200">
-                Esercitazione Pratica Interattiva
-              </span>
-            </div>
-            <h3 className="font-bold text-slate-900 text-sm sm:text-base">
-              Laboratorio Casi Pratici: Il Semaforo della PA
-            </h3>
-            <p className="text-xs text-slate-600 mt-0.5">
-              Vuoi testare in prima persona questi dilemmi e scoprire se avresti preso la decisione corretta?
-            </p>
-          </div>
-          <button
-            onClick={onGoToSimulator}
-            className="inline-flex items-center gap-1.5 px-4 py-2 bg-teal-800 hover:bg-teal-900 text-white text-xs font-bold rounded-lg transition-colors shadow-sm shrink-0 whitespace-nowrap"
-          >
-            <span>Avvia Laboratorio Casi</span>
-            <ArrowRight className="w-4 h-4" />
-          </button>
-        </div>
-
-        {/* Traffic Cases Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 mb-8">
-          {filteredTrafficCases.map((item) => {
-            const isGreen = item.category === 'Verde';
-            const isYellow = item.category === 'Giallo';
-            const isRed = item.category === 'Rosso';
-
-            return (
-              <div
-                key={item.id}
-                className={`p-5 rounded-xl border flex flex-col justify-between transition-all ${
-                  isGreen
-                    ? 'bg-emerald-50/50 border-emerald-200'
-                    : isYellow
-                    ? 'bg-amber-50/50 border-amber-200'
-                    : 'bg-rose-50/50 border-rose-200'
-                }`}
-              >
-                <div>
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-1.5">
-                      <span
-                        className={`w-2.5 h-2.5 rounded-full ${
-                          isGreen ? 'bg-emerald-600' : isYellow ? 'bg-amber-500' : 'bg-rose-600'
-                        }`}
-                      />
-                      <span
-                        className={`text-xs font-bold uppercase tracking-wide ${
-                          isGreen
-                            ? 'text-emerald-800'
-                            : isYellow
-                            ? 'text-amber-800'
-                            : 'text-rose-800'
-                        }`}
-                      >
-                        {item.category}
-                      </span>
-                    </div>
-                    <span className="text-[11px] text-slate-500 bg-white/80 px-2 py-0.5 rounded border border-slate-200">
-                      {item.context}
-                    </span>
-                  </div>
-
-                  <h3 className="font-bold text-slate-900 text-sm mb-2">{item.title}</h3>
-                  <div className="p-3 bg-white/90 rounded-lg border border-slate-200 mb-3 text-xs italic text-slate-700">
-                    {item.quote}
-                  </div>
-                  <p className="text-xs font-semibold text-slate-800 mb-1">
-                    Esito: {item.verdict}
-                  </p>
-                  <p className="text-[11px] text-slate-600 mb-3 leading-relaxed">
-                    <strong>Motivazione:</strong> {item.legalBasis}
-                  </p>
-                </div>
-
-                <div className="pt-2 border-t border-slate-200/80 text-[11px] text-slate-700 bg-white/60 p-2 rounded">
-                  <span className="font-bold text-slate-900">Regola pratica: </span>
-                  {item.practicalAdvice}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Roles Responsibility Chart + Alternative Official Channels */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start pt-6 border-t border-slate-200">
-          <div className="lg:col-span-7">
-            <ResponsibilityStackChart />
-          </div>
-
-          <div className="lg:col-span-5 space-y-3">
-            <h3 className="text-base font-bold text-slate-900">
-              Se c'è un problema in ufficio: i 3 canali corretti
-            </h3>
-            <p className="text-xs text-slate-600 leading-relaxed">
-              Il Codice di Comportamento vieta di usare i social network per denigrare l'ente o i colleghi.
-              Se riscontri inefficienze o illeciti, questi sono gli strumenti deputati:
-            </p>
-
-            <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200">
-              <div className="flex items-center gap-2 mb-1">
-                <span className="w-5 h-5 rounded-full bg-teal-800 text-white flex items-center justify-center text-xs font-bold font-mono">
-                  1
-                </span>
-                <h4 className="font-bold text-slate-900 text-xs sm:text-sm">
-                  Segnalazione Gerarchica Interna
-                </h4>
-              </div>
-              <p className="text-xs text-slate-600 ml-7">
-                Comunica disfunzioni, carenze di risorse o problemi procedurali al tuo responsabile di
-                settore, posizione organizzativa o dirigente di riferimento.
-              </p>
-            </div>
-
-            <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200">
-              <div className="flex items-center gap-2 mb-1">
-                <span className="w-5 h-5 rounded-full bg-teal-800 text-white flex items-center justify-center text-xs font-bold font-mono">
-                  2
-                </span>
-                <h4 className="font-bold text-slate-900 text-xs sm:text-sm">
-                  Rappresentanze Sindacali (RSU)
-                </h4>
-              </div>
-              <p className="text-xs text-slate-600 ml-7">
-                Per questioni attinenti all'organizzazione del lavoro, carichi, sicurezza, orari o accordi
-                di secondo livello, il confronto avviene tramite i tavoli sindacali.
-              </p>
-            </div>
-
-            <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200">
-              <div className="flex items-center gap-2 mb-1">
-                <span className="w-5 h-5 rounded-full bg-teal-800 text-white flex items-center justify-center text-xs font-bold font-mono">
-                  3
-                </span>
-                <h4 className="font-bold text-slate-900 text-xs sm:text-sm">
-                  Whistleblowing (D.Lgs. 24/2023)
-                </h4>
-              </div>
-              <p className="text-xs text-slate-600 ml-7">
-                In caso di illeciti penali, corruzione, gravi violazioni o spreco di denaro pubblico, utilizza
-                la piattaforma informatica crittografata dell'ente per la tutela assoluta dell'identità.
-              </p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* 04. Vademecum del Dipendente Consapevole */}
-      <section className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 sm:p-8">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
-          <div>
-            <div className="flex items-center gap-2 text-xs text-teal-700 font-semibold mb-1">
-              <span>Modulo 4</span>
-              <span aria-hidden="true">·</span>
               <span>Vademecum Operativo</span>
             </div>
             <h2 className="text-2xl font-extrabold text-slate-900 tracking-tight">
-              4. Vademecum del Dipendente Consapevole
+              3. Vademecum del Dipendente Consapevole
             </h2>
             <p className="text-slate-600 text-sm mt-1">
               Tabella di sintesi per consultazione immediata prima di qualsiasi pubblicazione online.
