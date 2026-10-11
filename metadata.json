@@ -1,0 +1,6 @@
+{
+  "name": "Social Media & Lavoro Pubblico - Guida Interattiva",
+  "description": "Piattaforma formativa e guida interattiva per i dipendenti pubblici sull'uso consapevole, etico e responsabile dei social media e delle chat di messaggistica.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
