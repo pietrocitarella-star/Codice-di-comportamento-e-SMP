@@ -1,4 +1,4 @@
-export type TabType = 'guida' | 'simulatore' | 'analizzatore' | 'quiz' | 'strumenti';
+export type TabType = 'guida' | 'simulatore' | 'analizzatore' | 'quiz' | 'strumenti' | 'debriefing';
 
 export interface TrafficLightCase {
   id: string;
@@ -10,6 +10,36 @@ export interface TrafficLightCase {
   legalBasis: string;
   practicalAdvice: string;
   iconName: string;
+}
+
+export interface AnonymousSubmission {
+  id: string;
+  caseId: string;
+  choice: 'Verde' | 'Giallo' | 'Rosso';
+  timestamp: number;
+}
+
+export interface CaseDebriefStats {
+  caseId: string;
+  title: string;
+  context: string;
+  correctCategory: 'Verde' | 'Giallo' | 'Rosso';
+  quote: string;
+  totalAnswers: number;
+  counts: {
+    Verde: number;
+    Giallo: number;
+    Rosso: number;
+  };
+  percentages: {
+    Verde: number;
+    Giallo: number;
+    Rosso: number;
+  };
+  correctPercentage: number;
+  mostCommonPitfall: string;
+  discussionQuestion: string;
+  legalFocus: string;
 }
 
 export interface QuizQuestion {

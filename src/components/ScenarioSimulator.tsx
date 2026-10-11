@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { TrafficLightCase } from '../types';
 import { TRAFFIC_LIGHT_CASES } from '../data/courseData';
+import { debriefingService } from '../services/debriefingService';
 import {
   CheckCircle2,
   AlertTriangle,
@@ -35,6 +36,8 @@ export const ScenarioSimulator: React.FC = () => {
       ...prev,
       [activeCase.id]: { choice, isCorrect },
     }));
+    // Record anonymous answer for classroom debriefing
+    debriefingService.recordAnswer(activeCase.id, choice);
   };
 
   const handleNext = () => {
@@ -62,16 +65,18 @@ export const ScenarioSimulator: React.FC = () => {
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
             <div className="flex items-center gap-2 text-xs text-teal-700 font-semibold mb-1">
-              <span>Palestra Pratica Interattiva</span>
+              <span>Sezione Operativa in Evidenza</span>
               <span aria-hidden="true">·</span>
               <span>Dilemmi del Lavoro Pubblico</span>
+              <span aria-hidden="true">·</span>
+              <span>D.P.R. 81/2023</span>
             </div>
             <h2 className="text-2xl font-extrabold text-slate-900 tracking-tight">
-              Simulatore del Semaforo: Tu Come Valuteresti?
+              Laboratorio Casi Pratici: Il Semaforo della PA
             </h2>
             <p className="text-slate-600 text-sm mt-1 max-w-2xl">
-              Mettiti alla prova con situazioni reali affrontate ogni giorno dai dipendenti delle PA.
-              Assegna il colore corretto (Verde, Giallo o Rosso) e scopri la motivazione giuridica.
+              Palestra interattiva di decisione: mettiti alla prova con situazioni e dilemmi reali affrontati
+              quotidianamente dai dipendenti pubblici. Assegna il semaforo (Verde, Giallo o Rosso) e confronta la tua scelta con la motivazione del Codice di Comportamento.
             </p>
           </div>
 

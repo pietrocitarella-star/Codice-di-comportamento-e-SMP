@@ -23,6 +23,8 @@ import {
   ExternalLink,
   ChevronDown,
   ChevronUp,
+  ArrowRight,
+  Sparkles,
 } from 'lucide-react';
 import { TabType } from '../types';
 
@@ -115,25 +117,26 @@ export const GuideSection: React.FC<GuideSectionProps> = ({
             </p>
           </div>
 
-          <div className="bg-white/10 backdrop-blur-md p-5 rounded-xl border border-white/20 min-w-[240px] text-center w-full lg:w-auto">
-            <span className="text-xs uppercase tracking-wider text-teal-200 font-semibold block">
-              Obiettivo Didattico
+          <div className="bg-white/10 backdrop-blur-md p-6 rounded-2xl border border-white/20 min-w-[280px] lg:max-w-xs text-left w-full lg:w-auto shadow-md">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+              <span className="text-[11px] uppercase tracking-wider text-amber-300 font-bold">
+                Esercitazione in Evidenza
+              </span>
+            </div>
+            <span className="text-lg sm:text-xl font-extrabold text-white block leading-snug">
+              Laboratorio Casi Pratici: Il Semaforo
             </span>
-            <span className="text-xl font-extrabold text-white mt-1 block">
-              Uso Consapevole & Etico
-            </span>
-            <div className="mt-3 pt-3 border-t border-white/20 flex justify-center gap-3">
+            <p className="text-xs text-teal-100 mt-1.5 leading-relaxed">
+              Mettiti alla prova sui dilemmi quotidiani della PA: scopri in diretta se un post, una foto o una chat sono Verde, Giallo o Rosso.
+            </p>
+            <div className="mt-4 pt-3 border-t border-white/20">
               <button
                 onClick={onGoToSimulator}
-                className="px-3 py-1.5 bg-teal-600 hover:bg-teal-500 text-white text-xs font-semibold rounded-lg transition-colors"
+                className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-extrabold rounded-xl transition-all shadow-md hover:shadow-lg hover:scale-[1.02] active:scale-[0.98]"
               >
-                Simula Casi
-              </button>
-              <button
-                onClick={onGoToQuiz}
-                className="px-3 py-1.5 bg-white/20 hover:bg-white/30 text-white text-xs font-semibold rounded-lg transition-colors"
-              >
-                Fai il Test
+                <span>Avvia Laboratorio Casi</span>
+                <ArrowRight className="w-4 h-4" />
               </button>
             </div>
           </div>
@@ -589,6 +592,31 @@ export const GuideSection: React.FC<GuideSectionProps> = ({
               Rosso
             </button>
           </div>
+        </div>
+
+        {/* Spotlight Banner to Interactive Cases Laboratory */}
+        <div className="bg-gradient-to-r from-amber-500/10 via-teal-500/10 to-emerald-500/10 border border-teal-300/60 rounded-xl p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6 shadow-xs">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <Sparkles className="w-4 h-4 text-amber-600" />
+              <span className="text-[11px] font-bold uppercase tracking-wider text-teal-900 bg-white/90 px-2 py-0.5 rounded border border-teal-200">
+                Esercitazione Pratica Interattiva
+              </span>
+            </div>
+            <h3 className="font-bold text-slate-900 text-sm sm:text-base">
+              Laboratorio Casi Pratici: Il Semaforo della PA
+            </h3>
+            <p className="text-xs text-slate-600 mt-0.5">
+              Vuoi testare in prima persona questi dilemmi e scoprire se avresti preso la decisione corretta?
+            </p>
+          </div>
+          <button
+            onClick={onGoToSimulator}
+            className="inline-flex items-center gap-1.5 px-4 py-2 bg-teal-800 hover:bg-teal-900 text-white text-xs font-bold rounded-lg transition-colors shadow-sm shrink-0 whitespace-nowrap"
+          >
+            <span>Avvia Laboratorio Casi</span>
+            <ArrowRight className="w-4 h-4" />
+          </button>
         </div>
 
         {/* Traffic Cases Grid */}

@@ -30,7 +30,7 @@ export const Header: React.FC<HeaderProps> = ({
             </span>
           </div>
 
-          {/* Zone 2: 4-5 clean single-line nav links */}
+          {/* Zone 2: Clean single-line nav links for available sections */}
           <nav className="hidden md:flex items-center gap-6 text-sm font-medium text-slate-600">
             <button
               onClick={() => setActiveTab('guida')}
@@ -38,34 +38,18 @@ export const Header: React.FC<HeaderProps> = ({
                 activeTab === 'guida' ? 'text-teal-900 font-bold border-b-2 border-teal-700' : ''
               }`}
             >
-              Guida Interattiva
+              Guida & Infografica
             </button>
             <button
               onClick={() => setActiveTab('simulatore')}
-              className={`hover:text-teal-800 transition-colors whitespace-nowrap shrink-0 pb-0.5 ${
+              className={`hover:text-teal-800 transition-colors whitespace-nowrap shrink-0 pb-0.5 flex items-center gap-2 ${
                 activeTab === 'simulatore' ? 'text-teal-900 font-bold border-b-2 border-teal-700' : ''
               }`}
             >
-              Casi & Semaforo
-            </button>
-            <button
-              onClick={() => setActiveTab('analizzatore')}
-              className={`hover:text-teal-800 transition-colors whitespace-nowrap shrink-0 pb-0.5 ${
-                activeTab === 'analizzatore' ? 'text-teal-900 font-bold border-b-2 border-teal-700' : ''
-              }`}
-            >
-              Analisi Post & Bio
-            </button>
-            <button
-              onClick={() => setActiveTab('quiz')}
-              className={`hover:text-teal-800 transition-colors whitespace-nowrap shrink-0 pb-0.5 flex items-center gap-1.5 ${
-                activeTab === 'quiz' ? 'text-teal-900 font-bold border-b-2 border-teal-700' : ''
-              }`}
-            >
-              <span>Test & Attestato</span>
-              {completedQuiz && (
-                <Award className="w-3.5 h-3.5 text-amber-600" />
-              )}
+              <span>Laboratorio Casi Pratici: Il Semaforo</span>
+              <span className="text-[10px] font-bold uppercase tracking-wider bg-amber-100 text-amber-900 px-1.5 py-0.5 rounded">
+                In Evidenza
+              </span>
             </button>
           </nav>
 
@@ -82,30 +66,23 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
 
         {/* Mobile secondary navigation strip */}
-        <div className="flex md:hidden items-center justify-around py-2 border-t border-slate-100 overflow-x-auto text-xs font-medium text-slate-600">
+        <div className="flex md:hidden items-center justify-around py-2 border-t border-slate-100 text-xs font-medium text-slate-600">
           <button
             onClick={() => setActiveTab('guida')}
-            className={`px-2 py-1 rounded whitespace-nowrap ${activeTab === 'guida' ? 'text-teal-900 font-bold bg-teal-50' : ''}`}
+            className={`px-3 py-1.5 rounded-lg whitespace-nowrap ${
+              activeTab === 'guida' ? 'text-teal-900 font-bold bg-teal-50' : ''
+            }`}
           >
-            Guida
+            Guida & Infografica
           </button>
           <button
             onClick={() => setActiveTab('simulatore')}
-            className={`px-2 py-1 rounded whitespace-nowrap ${activeTab === 'simulatore' ? 'text-teal-900 font-bold bg-teal-50' : ''}`}
+            className={`px-3 py-1.5 rounded-lg whitespace-nowrap flex items-center gap-1.5 ${
+              activeTab === 'simulatore' ? 'text-teal-900 font-bold bg-teal-50' : ''
+            }`}
           >
-            Semaforo
-          </button>
-          <button
-            onClick={() => setActiveTab('analizzatore')}
-            className={`px-2 py-1 rounded whitespace-nowrap ${activeTab === 'analizzatore' ? 'text-teal-900 font-bold bg-teal-50' : ''}`}
-          >
-            Analisi Post
-          </button>
-          <button
-            onClick={() => setActiveTab('quiz')}
-            className={`px-2 py-1 rounded whitespace-nowrap ${activeTab === 'quiz' ? 'text-teal-900 font-bold bg-teal-50' : ''}`}
-          >
-            Test Attestato
+            <span>Laboratorio Casi (Semaforo)</span>
+            <span className="w-2 h-2 rounded-full bg-amber-500" />
           </button>
         </div>
       </div>
