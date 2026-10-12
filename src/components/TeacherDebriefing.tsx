@@ -3,6 +3,7 @@ import { debriefingService, CLASSROOM_SESSIONS } from '../services/debriefingSer
 import { ClassroomSessionId, CaseDebriefStats } from '../types';
 import {
   Lock,
+  Unlock,
   Users,
   BarChart3,
   CheckCircle2,
@@ -22,11 +23,79 @@ import {
   Shuffle,
   RefreshCw,
   Check,
+  History,
+  Tag,
+  X,
+  FileText,
+  AlertCircle,
+  Radio,
 } from 'lucide-react';
 
 interface TeacherDebriefingProps {
   onLogout: () => void;
 }
+
+const APP_VERSION = 'v2.4.0';
+
+const CHANGELOG_ENTRIES = [
+  {
+    version: 'v2.4.0',
+    date: '28 Ottobre 2026',
+    title: 'Modalità Decisionale Binaria, Gating Aula e Sicurezza PIN',
+    badge: 'Versione Attuale',
+    changes: [
+      'Passaggio a 2 sole opzioni nel laboratorio: Verde (Corretta) e Rossa (Da evitare o che richiede cautela).',
+      'Inserimento del messaggio di conferma per validare la risposta selezionata dal discente.',
+      'Navigazione bidirezionale libera tra i casi (avanti/indietro/selettore a pillole) con possibilità di modifica prima dell\'invio.',
+      'Pulsante conclusivo di invio definitivo del test con congelamento e blocco modifiche post-invio.',
+      'Controllo accesso (Gating) del laboratorio: i corsisti possono rispondere solo se il formatore apre manualmente la sessione d\'aula.',
+      'Oscuramento e rimozione totale del PIN (2204) da placeholder, etichette e testi visibili a schermo.',
+      'Pulsante dedicato di uscita rapida dall\'area riservata (logout) con disconnessione di sicurezza.',
+      'Registro di versione e changelog integrato consultabile nell\'area riservata.',
+    ],
+  },
+  {
+    version: 'v2.3.0',
+    date: '27 Ottobre 2026',
+    title: 'Perfezionamento Orari e Rimozione Filtri Superflui',
+    changes: [
+      'Orari aule corretti e uniformati: Mattina (9.30 - 11.30) e Pomeriggio (12.00 - 14.00).',
+      'Rimozione del filtro per canale nel laboratorio casi pratici.',
+      'Eliminazione del grafico a torta dell\'origine delle segnalazioni.',
+      'Rimozione prefisso "Docente" davanti al nome di Pietro Citarella.',
+      'Funzione "Rimescola Casi" spostata esclusivamente all\'interno dell\'area riservata con notifica visiva.',
+    ],
+  },
+  {
+    version: 'v2.2.0',
+    date: '26 Ottobre 2026',
+    title: 'Gestione Multi-Aula e Azzeramento Risposte',
+    changes: [
+      'Separazione e isolamento dei risultati per le 4 lezioni (27 e 28 Ottobre, mattina e pomeriggio).',
+      'Pulsante di azzeramento risposte per singola aula o per tutte le 4 aule simultaneamente per le prove pre-corso.',
+      'Aggiornamento PIN di sicurezza a 2204.',
+    ],
+  },
+  {
+    version: 'v2.1.0',
+    date: '25 Ottobre 2026',
+    title: 'Dashboard Debriefing Riservata e Algoritmo di Rimescolamento',
+    changes: [
+      'Creazione dell\'area riservata con accesso PIN per l\'analisi anonima in tempo reale.',
+      'Algoritmo smart-shuffle per alternare e distribuire uniformemente i casi nel laboratorio.',
+      'Modalità Proiettore/LIM a schermo intero con navigazione da tastiera per la restituzione in aula.',
+    ],
+  },
+  {
+    version: 'v2.0.0',
+    date: '24 Ottobre 2026',
+    title: 'Rilascio Laboratorio Dilemmi Operativi PA',
+    changes: [
+      'Simulatore interattivo basato sulle novità del D.P.R. 81/2023 (Codice di Comportamento integrato).',
+      'Sezione interattiva con canoni di comportamento, vademecum e linee guida per social media.',
+    ],
+  },
+];
 
 export const TeacherDebriefing: React.FC<TeacherDebriefingProps> = ({ onLogout }) => {
   const [selectedSession, setSelectedSession] = useState<ClassroomSessionId | 'all'>('27_ottobre_mattina');
@@ -39,16 +108,25 @@ export const TeacherDebriefing: React.FC<TeacherDebriefingProps> = ({ onLogout }
   const [activeSessionNotice, setActiveSessionNotice] = useState(false);
   const [shuffledNotice, setShuffledNotice] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [showChangelogModal, setShowChangelogModal] = useState(false);
 
-  // Sync from server on mount and periodically every 5 seconds
+  // Classroom lab open state
+  const [isLabOpen, setIsLabOpen] = useState<boolean>(() => debriefingService.isSessionOpen());
+  const [activeSessionGlobal, setActiveSessionGlobal] = useState<ClassroomSessionId>(() =>
+    debriefingService.getActiveSessionId()
+  );
+
+  // Sync from server on mount and periodically every 4 seconds
   useEffect(() => {
     const fetchFreshData = async () => {
       await debriefingService.syncFromServer();
       setStats(debriefingService.getDebriefStats(selectedSession));
+      setIsLabOpen(debriefingService.isSessionOpen());
+      setActiveSessionGlobal(debriefingService.getActiveSessionId());
     };
 
     fetchFreshData();
-    const interval = setInterval(fetchFreshData, 5000);
+    const interval = setInterval(fetchFreshData, 4000);
     return () => clearInterval(interval);
   }, [selectedSession]);
 
@@ -56,6 +134,8 @@ export const TeacherDebriefing: React.FC<TeacherDebriefingProps> = ({ onLogout }
   useEffect(() => {
     const unsubscribe = debriefingService.onUpdate(() => {
       setStats(debriefingService.getDebriefStats(selectedSession));
+      setIsLabOpen(debriefingService.isSessionOpen());
+      setActiveSessionGlobal(debriefingService.getActiveSessionId());
     });
     return () => unsubscribe();
   }, [selectedSession]);
@@ -65,8 +145,11 @@ export const TeacherDebriefing: React.FC<TeacherDebriefingProps> = ({ onLogout }
     setStats(debriefingService.getDebriefStats(sessionId));
   };
 
-  const handleSetActiveSessionForStudents = (sessionId: ClassroomSessionId) => {
-    debriefingService.setActiveSessionId(sessionId);
+  const handleToggleLabOpen = (shouldOpen: boolean, targetSession?: ClassroomSessionId) => {
+    const sessionToUse = targetSession || (selectedSession !== 'all' ? selectedSession : '27_ottobre_mattina');
+    debriefingService.setSessionOpen(shouldOpen, sessionToUse);
+    setIsLabOpen(shouldOpen);
+    setActiveSessionGlobal(sessionToUse);
     setActiveSessionNotice(true);
     setTimeout(() => setActiveSessionNotice(false), 3000);
   };
@@ -100,6 +183,8 @@ export const TeacherDebriefing: React.FC<TeacherDebriefingProps> = ({ onLogout }
     setIsSyncing(true);
     await debriefingService.syncFromServer();
     setStats(debriefingService.getDebriefStats(selectedSession));
+    setIsLabOpen(debriefingService.isSessionOpen());
+    setActiveSessionGlobal(debriefingService.getActiveSessionId());
     setTimeout(() => setIsSyncing(false), 500);
   };
 
@@ -131,7 +216,7 @@ export const TeacherDebriefing: React.FC<TeacherDebriefingProps> = ({ onLogout }
   });
 
   const activePresentationCase = stats.cases[presentationCaseIndex] || stats.cases[0];
-  const activeSessionGlobal = debriefingService.getActiveSessionId();
+  const activeSessionInfo = CLASSROOM_SESSIONS.find((s) => s.id === activeSessionGlobal);
 
   // ==========================================
   // PRESENTATION / PROJECTOR MODE VIEW
@@ -168,10 +253,10 @@ export const TeacherDebriefing: React.FC<TeacherDebriefingProps> = ({ onLogout }
           <div>
             <div className="flex items-center gap-3 mb-2">
               <span className="text-xs text-slate-400 bg-slate-800/80 px-2 py-0.5 rounded">
-                Canale: {c.context}
+                Ambito: {c.context}
               </span>
               <span className="text-xs text-slate-400 font-mono">
-                Risposte aula: {c.totalAnswers}
+                Risposte pervenute: {c.totalAnswers}
               </span>
             </div>
             <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight mb-4">
@@ -190,10 +275,10 @@ export const TeacherDebriefing: React.FC<TeacherDebriefingProps> = ({ onLogout }
             <div className="mb-8 bg-slate-900/60 p-6 rounded-2xl border border-slate-800/80">
               <div className="flex justify-between items-center mb-4">
                 <span className="text-xs uppercase tracking-wider font-bold text-slate-300">
-                  Distribuzione delle Risposte in Quest'Aula
+                  Distribuzione delle Risposte in Quest'Aula (Scelta Binaria)
                 </span>
                 <span className="text-xs font-bold text-emerald-400 bg-emerald-950/60 px-2.5 py-1 rounded border border-emerald-800">
-                  Risposta Corretta: {c.correctCategory} ({c.correctPercentage}%)
+                  Risposta Conforme: {c.correctCategory === 'Verde' ? 'Verde (Corretta)' : 'Rossa (Da evitare / Cautela)'} ({c.correctPercentage}%)
                 </span>
               </div>
 
@@ -203,10 +288,10 @@ export const TeacherDebriefing: React.FC<TeacherDebriefingProps> = ({ onLogout }
                   <div className="flex justify-between text-xs font-semibold mb-1">
                     <span className="text-emerald-400 flex items-center gap-1.5">
                       <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-                      <span>Verde - Consentito</span>
+                      <span>Verde · Corretta / Conforme</span>
                       {c.correctCategory === 'Verde' && (
-                        <span className="text-[10px] bg-emerald-900 text-emerald-200 px-1.5 rounded font-mono">
-                          CORRETTO
+                        <span className="text-[10px] bg-emerald-900 text-emerald-200 px-1.5 rounded font-mono font-bold">
+                          CONFORME
                         </span>
                       )}
                     </span>
@@ -222,50 +307,26 @@ export const TeacherDebriefing: React.FC<TeacherDebriefingProps> = ({ onLogout }
                   </div>
                 </div>
 
-                {/* Giallo */}
-                <div>
-                  <div className="flex justify-between text-xs font-semibold mb-1">
-                    <span className="text-amber-400 flex items-center gap-1.5">
-                      <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
-                      <span>Giallo - Serve Cautela</span>
-                      {c.correctCategory === 'Giallo' && (
-                        <span className="text-[10px] bg-amber-900 text-amber-200 px-1.5 rounded font-mono">
-                          CORRETTO
-                        </span>
-                      )}
-                    </span>
-                    <span className="font-mono text-slate-200">
-                      {c.counts.Giallo} voti ({c.percentages.Giallo}%)
-                    </span>
-                  </div>
-                  <div className="w-full bg-slate-800 rounded-full h-4 overflow-hidden">
-                    <div
-                      className="bg-amber-500 h-full rounded-full transition-all duration-700"
-                      style={{ width: `${c.percentages.Giallo}%` }}
-                    />
-                  </div>
-                </div>
-
-                {/* Rosso */}
+                {/* Rosso (inclusi eventuali gialli come non conformi/cautela) */}
                 <div>
                   <div className="flex justify-between text-xs font-semibold mb-1">
                     <span className="text-rose-400 flex items-center gap-1.5">
                       <span className="w-2.5 h-2.5 rounded-full bg-rose-500" />
-                      <span>Rosso - Da Evitare</span>
+                      <span>Rossa · Da Evitare o con Cautela</span>
                       {c.correctCategory === 'Rosso' && (
-                        <span className="text-[10px] bg-rose-900 text-rose-200 px-1.5 rounded font-mono">
-                          CORRETTO
+                        <span className="text-[10px] bg-rose-900 text-rose-200 px-1.5 rounded font-mono font-bold">
+                          CONFORME AL CODICE
                         </span>
                       )}
                     </span>
                     <span className="font-mono text-slate-200">
-                      {c.counts.Rosso} voti ({c.percentages.Rosso}%)
+                      {c.counts.Rosso + c.counts.Giallo} voti ({Math.min(100, c.percentages.Rosso + c.percentages.Giallo)}%)
                     </span>
                   </div>
                   <div className="w-full bg-slate-800 rounded-full h-4 overflow-hidden">
                     <div
                       className="bg-rose-500 h-full rounded-full transition-all duration-700"
-                      style={{ width: `${c.percentages.Rosso}%` }}
+                      style={{ width: `${Math.min(100, c.percentages.Rosso + c.percentages.Giallo)}%` }}
                     />
                   </div>
                 </div>
@@ -275,7 +336,7 @@ export const TeacherDebriefing: React.FC<TeacherDebriefingProps> = ({ onLogout }
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
               <div className="bg-slate-900 p-4 rounded-xl border border-slate-800">
                 <span className="text-amber-400 font-bold block mb-1 uppercase tracking-wide">
-                  ⚠️ Trappola & Dubbio Frequente:
+                  ⚠️ Trappola & Dubbio Frequente in Aula:
                 </span>
                 <p className="text-slate-300 leading-relaxed">{c.mostCommonPitfall}</p>
               </div>
@@ -328,23 +389,44 @@ export const TeacherDebriefing: React.FC<TeacherDebriefingProps> = ({ onLogout }
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 sm:p-8">
         <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 pb-6 border-b border-slate-200">
           <div>
-            <div className="flex items-center gap-2 text-xs font-bold text-teal-800 mb-1">
+            <div className="flex flex-wrap items-center gap-2 text-xs font-bold text-teal-800 mb-1">
               <Lock className="w-3.5 h-3.5" />
               <span>Area Riservata · Pietro Citarella</span>
               <span aria-hidden="true">·</span>
               <span className="text-slate-500 font-normal">Gestione 4 Aule (27-28 Ottobre)</span>
+              <span aria-hidden="true">·</span>
+              {/* Version Badge & Changelog trigger */}
+              <button
+                onClick={() => setShowChangelogModal(true)}
+                className="inline-flex items-center gap-1 bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-300 px-2 py-0.5 rounded-full font-mono text-[11px] transition-colors cursor-pointer"
+                title="Visualizza changelog e registro delle modifiche"
+              >
+                <Tag className="w-3 h-3 text-teal-700" />
+                <span>{APP_VERSION}</span>
+                <span className="underline decoration-dotted ml-0.5">Changelog</span>
+              </button>
             </div>
             <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
               Dashboard Restituzione Debriefing
             </h1>
             <p className="text-xs sm:text-sm text-slate-600 mt-1 max-w-2xl leading-relaxed">
-              I risultati anonimi dei partecipanti sono separati e archiviati per ciascuna delle tue 4
+              I risultati anonimi dei partecipanti sono separati per ciascuna delle tue 4
               lezioni (mattina e pomeriggio del 27 e 28 ottobre).
             </p>
           </div>
 
           {/* Action buttons */}
           <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
+            {/* Version / Changelog button */}
+            <button
+              onClick={() => setShowChangelogModal(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-2 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-xl text-xs font-semibold transition-colors border border-slate-300"
+              title="Visualizza registro versioni e modifiche"
+            >
+              <History className="w-3.5 h-3.5 text-slate-600" />
+              <span>Changelog ({APP_VERSION})</span>
+            </button>
+
             <button
               onClick={handleManualSync}
               disabled={isSyncing}
@@ -375,19 +457,96 @@ export const TeacherDebriefing: React.FC<TeacherDebriefingProps> = ({ onLogout }
               <span>Stampa Report</span>
             </button>
 
+            {/* Logout button */}
             <button
               onClick={onLogout}
-              className="inline-flex items-center gap-1.5 px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-semibold transition-colors"
-              title="Esci dall'area riservata docente"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold transition-colors shadow-xs"
+              title="Esci dall'area riservata e disconnettiti"
             >
               <LogOut className="w-3.5 h-3.5" />
-              <span>Esci</span>
+              <span>Esci dall'Area Riservata</span>
             </button>
           </div>
         </div>
 
-        {/* 4 Classrooms Tab Switcher */}
-        <div className="pt-6">
+        {/* ======================================================== */}
+        {/* CLASSROOM GATING CONTROL CARD (Open / Close for students) */}
+        {/* ======================================================== */}
+        <div className="pt-6 pb-2">
+          <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 sm:p-5 mb-5 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <div
+                className={`p-2.5 rounded-xl border shrink-0 ${
+                  isLabOpen
+                    ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+                    : 'bg-amber-50 text-amber-800 border-amber-300'
+                }`}
+              >
+                {isLabOpen ? <Unlock className="w-5 h-5 text-emerald-600" /> : <Lock className="w-5 h-5 text-amber-600" />}
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                    Stato Laboratorio Corsisti:
+                  </span>
+                  {isLabOpen ? (
+                    <span className="inline-flex items-center gap-1.5 bg-emerald-100 text-emerald-900 border border-emerald-300 px-2 py-0.5 rounded-full text-xs font-extrabold">
+                      <span className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse" />
+                      <span>APERTO PER LE RISPOSTE</span>
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 bg-amber-100 text-amber-900 border border-amber-300 px-2 py-0.5 rounded-full text-xs font-extrabold">
+                      <Lock className="w-3 h-3 text-amber-700" />
+                      <span>CHIUSO (RISPOSTE BLOCCATE)</span>
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-slate-600 mt-1">
+                  {isLabOpen ? (
+                    <>
+                      I discenti possono rispondere al test per l'aula attiva:{' '}
+                      <strong className="text-slate-900">{activeSessionInfo?.label}</strong>.
+                    </>
+                  ) : (
+                    'Nessun corsista può inviare risposte finché non apri manualmente la sessione per l\'aula desiderata.'
+                  )}
+                </p>
+              </div>
+            </div>
+
+            {/* Toggle open / close button */}
+            <div className="flex items-center gap-2 shrink-0 w-full md:w-auto">
+              {isLabOpen ? (
+                <button
+                  onClick={() => handleToggleLabOpen(false)}
+                  className="w-full md:w-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 rounded-xl text-xs font-bold transition-all shadow-xs"
+                >
+                  <Lock className="w-4 h-4" />
+                  <span>Chiudi Laboratorio (Blocca Risposte)</span>
+                </button>
+              ) : (
+                <button
+                  onClick={() =>
+                    handleToggleLabOpen(
+                      true,
+                      selectedSession !== 'all' ? selectedSession : '27_ottobre_mattina'
+                    )
+                  }
+                  className="w-full md:w-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold transition-all shadow-sm"
+                >
+                  <Unlock className="w-4 h-4" />
+                  <span>
+                    Apri Laboratorio per:{' '}
+                    {selectedSession !== 'all'
+                      ? CLASSROOM_SESSIONS.find((s) => s.id === selectedSession)?.label
+                      : '27 Ottobre Mattina'}
+                  </span>
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* 4 Classrooms Tab Switcher */}
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <Calendar className="w-4 h-4 text-teal-800" />
@@ -395,36 +554,13 @@ export const TeacherDebriefing: React.FC<TeacherDebriefingProps> = ({ onLogout }
                 Seleziona l'Aula da Esaminare:
               </span>
             </div>
-            {selectedSession !== 'all' && (
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => handleSetActiveSessionForStudents(selectedSession)}
-                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold border transition-all ${
-                    activeSessionGlobal === selectedSession
-                      ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
-                      : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
-                  }`}
-                  title="Imposta questa aula come predefinita per tutti i corsisti che aprono l'app"
-                >
-                  {activeSessionGlobal === selectedSession ? (
-                    <>
-                      <Check className="w-3.5 h-3.5 text-emerald-600" />
-                      <span>Aula Attualmente Attiva per i Corsisti</span>
-                    </>
-                  ) : (
-                    <span>Imposta come Aula Attiva per l'Esercitazione</span>
-                  )}
-                </button>
-              </div>
-            )}
           </div>
 
           {activeSessionNotice && (
             <div className="mb-3 p-2.5 bg-emerald-50 border border-emerald-200 rounded-lg text-xs text-emerald-800 flex items-center gap-2 animate-fadeIn">
               <Check className="w-4 h-4 text-emerald-600 shrink-0" />
               <span>
-                Aula impostata con successo! I corsisti che apriranno l'app invieranno le risposte in
-                questa sessione.
+                Stato sessione aggiornato in tempo reale con successo!
               </span>
             </div>
           )}
@@ -433,7 +569,7 @@ export const TeacherDebriefing: React.FC<TeacherDebriefingProps> = ({ onLogout }
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
             {CLASSROOM_SESSIONS.map((session) => {
               const isSelected = selectedSession === session.id;
-              const isGlobalActive = activeSessionGlobal === session.id;
+              const isGlobalActiveAndOpen = activeSessionGlobal === session.id && isLabOpen;
 
               return (
                 <button
@@ -453,13 +589,13 @@ export const TeacherDebriefing: React.FC<TeacherDebriefingProps> = ({ onLogout }
                     >
                       {session.day}
                     </span>
-                    {isGlobalActive && (
-                      <span className="w-2 h-2 rounded-full bg-emerald-400" title="Aula Attiva" />
+                    {isGlobalActiveAndOpen && (
+                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" title="Sessione aperta e attiva per i corsisti" />
                     )}
                   </div>
                   <span className="font-bold text-xs block leading-tight">{session.slot}</span>
                   <span
-                    className={`text-[10px] font-mono mt-0.5 block ${
+                    className={`text-[11px] block mt-0.5 ${
                       isSelected ? 'text-teal-200' : 'text-slate-500'
                     }`}
                   >
@@ -469,13 +605,13 @@ export const TeacherDebriefing: React.FC<TeacherDebriefingProps> = ({ onLogout }
               );
             })}
 
-            {/* All sessions combined tab */}
+            {/* Total / All Classrooms Tab */}
             <button
               onClick={() => handleSelectSessionTab('all')}
               className={`p-3 rounded-xl border text-left transition-all ${
                 selectedSession === 'all'
                   ? 'bg-teal-900 text-white border-teal-900 shadow-sm'
-                  : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                  : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100 hover:border-slate-300'
               }`}
             >
               <span
@@ -487,126 +623,116 @@ export const TeacherDebriefing: React.FC<TeacherDebriefingProps> = ({ onLogout }
               </span>
               <span className="font-bold text-xs block leading-tight">Tutte le 4 Aule</span>
               <span
-                className={`text-[10px] mt-0.5 block ${
+                className={`text-[11px] block mt-0.5 ${
                   selectedSession === 'all' ? 'text-teal-200' : 'text-slate-500'
                 }`}
               >
-                Dati complessivi
+                Dati aggregati
               </span>
             </button>
           </div>
         </div>
 
-        {/* Classroom Quick Stats Grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-6">
-          <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
-            <span className="text-[11px] font-bold text-slate-500 uppercase block">
-              Partecipanti Stimati
+        {/* Global Stats Overview Strip */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-6 mt-6 border-t border-slate-100">
+          <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+            <span className="text-[11px] text-slate-500 block uppercase font-medium">
+              Voti Registrati
             </span>
-            <span className="font-mono text-2xl font-extrabold text-slate-900 mt-1 block">
-              {stats.totalParticipantsEstimated}
-            </span>
-            <span className="text-[11px] text-slate-500 mt-0.5 block">
-              In quest'aula ({stats.sessionLabel.split('(')[0].trim()})
-            </span>
-          </div>
-
-          <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
-            <span className="text-[11px] font-bold text-slate-500 uppercase block">
-              Risposte Raccolte
-            </span>
-            <span className="font-mono text-2xl font-extrabold text-teal-900 mt-1 block">
+            <span className="text-xl sm:text-2xl font-bold font-mono text-slate-900 mt-1 block">
               {stats.totalSubmissions}
             </span>
-            <span className="text-[11px] text-slate-500 mt-0.5 block">Decisioni registrate</span>
+            <span className="text-[11px] text-slate-500">Risposte anonime ricevute</span>
           </div>
 
-          <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
-            <span className="text-[11px] font-bold text-slate-500 uppercase block">
-              Accuratezza dell'Aula
+          <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+            <span className="text-[11px] text-slate-500 block uppercase font-medium">
+              Partecipanti Stimati
+            </span>
+            <span className="text-xl sm:text-2xl font-bold font-mono text-teal-800 mt-1 block">
+              {stats.totalParticipantsEstimated}
+            </span>
+            <span className="text-[11px] text-slate-500">In base al caso più risposto</span>
+          </div>
+
+          <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+            <span className="text-[11px] text-slate-500 block uppercase font-medium">
+              Accuratezza Generale
             </span>
             <span
-              className={`font-mono text-2xl font-extrabold mt-1 block ${
+              className={`text-xl sm:text-2xl font-bold font-mono mt-1 block ${
                 stats.overallAccuracy >= 70
                   ? 'text-emerald-700'
                   : stats.overallAccuracy >= 50
-                  ? 'text-amber-600'
-                  : 'text-rose-600'
+                  ? 'text-amber-700'
+                  : 'text-rose-700'
               }`}
             >
-              {stats.totalSubmissions > 0 ? `${stats.overallAccuracy}%` : '—'}
+              {stats.overallAccuracy}%
             </span>
-            <span className="text-[11px] text-slate-500 mt-0.5 block">Conformità al Codice</span>
+            <span className="text-[11px] text-slate-500">Conformità media al Codice</span>
           </div>
 
-          <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
-            <span className="text-[11px] font-bold text-slate-500 uppercase block">
-              Indice di Rischio Aula
+          <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+            <span className="text-[11px] text-slate-500 block uppercase font-medium">
+              Casi Analizzati
             </span>
-            <span
-              className={`font-bold text-base mt-2 block ${
-                stats.overallAccuracy >= 75
-                  ? 'text-emerald-800'
-                  : stats.overallAccuracy >= 60
-                  ? 'text-amber-800'
-                  : 'text-rose-800'
-              }`}
-            >
-              {stats.totalSubmissions === 0
-                ? 'Nessun voto ancora'
-                : stats.overallAccuracy >= 75
-                ? 'Basso (Aula Preparata)'
-                : stats.overallAccuracy >= 60
-                ? 'Moderato (Dubbi Frequenti)'
-                : 'Elevato (Focus Necessario)'}
+            <span className="text-xl sm:text-2xl font-bold font-mono text-slate-900 mt-1 block">
+              {stats.cases.length}
             </span>
-            <span className="text-[11px] text-slate-500 mt-0.5 block">Clima decisionale</span>
+            <span className="text-[11px] text-slate-500">Dilemmi D.P.R. 81/2023</span>
           </div>
         </div>
 
-        {/* Teacher Private Tools & Reset actions */}
-        <div className="flex flex-wrap items-center justify-between gap-3 pt-6 mt-6 border-t border-slate-200 text-xs">
+        {/* Toolbar: Shuffle, Sort, Mock, Reset */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-6 mt-6 border-t border-slate-100 text-xs">
           <div className="flex items-center gap-2">
             <button
               onClick={() => setSortByCritical(!sortByCritical)}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border transition-colors ${
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border font-semibold transition-colors ${
                 sortByCritical
-                  ? 'bg-amber-100 text-amber-900 border-amber-300 font-bold'
-                  : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200'
+                  ? 'bg-teal-900 text-white border-teal-900'
+                  : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
               }`}
             >
               <ArrowUpDown className="w-3.5 h-3.5" />
               <span>
-                {sortByCritical ? 'Ordinato per: Più Critici prima' : 'Ordina per: Più Critici prima'}
+                {sortByCritical ? 'Ordinati per Criticità (Meno corretti prima)' : 'Ordine Standard'}
               </span>
             </button>
+
+            {shuffledNotice && (
+              <span className="text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-1 rounded text-xs font-semibold animate-fadeIn">
+                ✓ Ordine casi rimescolato nel laboratorio!
+              </span>
+            )}
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
             {/* Shuffle cases button for teacher */}
             <button
               onClick={handleShuffleCasesFromTeacher}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-lg font-semibold transition-colors text-xs"
-              title="Rimescola casualmente l'ordine dei casi alternando verde, giallo e rosso"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-300 rounded-lg font-semibold transition-colors"
+              title="Rimescola casualmente l'ordine dei casi per i discenti nel laboratorio"
             >
-              <Shuffle className="w-3.5 h-3.5 text-teal-700" />
+              <Shuffle className="w-3.5 h-3.5" />
               <span>Rimescola Casi</span>
             </button>
 
             {/* Seed mock participants for the selected classroom */}
             <button
               onClick={handleSeedClassroom}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 rounded-lg font-semibold transition-colors"
-              title="Genera dati realistici di 26 discenti per testare o mostrare la simulazione in quest'aula"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-lg font-semibold transition-colors"
+              title="Simula 26 risposte per testare la grafica e la proiezione in aula prima dell'inizio del corso"
             >
-              <Sparkles className="w-3.5 h-3.5 text-teal-600" />
-              <span>Simula Voti di Prova (26 discenti)</span>
+              <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+              <span>Simula Voti di Prova (+26)</span>
             </button>
 
-            {/* Reset button with options */}
+            {/* Reset data */}
             <button
               onClick={() => {
-                setResetTarget('current');
+                setResetTarget(selectedSession === 'all' ? 'all' : 'current');
                 setConfirmResetOpen(true);
               }}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg font-semibold transition-colors"
@@ -753,18 +879,18 @@ export const TeacherDebriefing: React.FC<TeacherDebriefingProps> = ({ onLogout }
                 {c.quote}
               </div>
 
-              {/* Collective Responses Distribution Bar */}
+              {/* Collective Responses Distribution Bar (Binary Classification) */}
               <div className="mb-6 bg-slate-50/80 p-4 rounded-xl border border-slate-200">
                 <div className="flex justify-between items-center mb-3">
                   <span className="text-xs font-bold text-slate-800 uppercase tracking-wide">
-                    Distribuzione Risposte in Quest'Aula:
+                    Distribuzione Risposte in Quest'Aula (Due Opzioni):
                   </span>
                   <span className="text-xs font-bold text-slate-700">
-                    Risposta Corretta: <strong className="text-teal-900">{c.correctCategory}</strong>
+                    Risposta Conforme: <strong className="text-teal-900">{c.correctCategory === 'Verde' ? 'Verde (Corretta)' : 'Rossa (Da evitare / Cautela)'}</strong>
                   </span>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {/* Verde */}
                   <div
                     className={`p-3 rounded-lg border ${
@@ -776,13 +902,18 @@ export const TeacherDebriefing: React.FC<TeacherDebriefingProps> = ({ onLogout }
                     <div className="flex justify-between text-xs font-bold mb-1">
                       <span className="text-emerald-800 flex items-center gap-1">
                         <span className="w-2.5 h-2.5 rounded-full bg-emerald-600" />
-                        <span>Verde</span>
+                        <span>Verde · Corretta</span>
+                        {c.correctCategory === 'Verde' && (
+                          <span className="text-[10px] bg-emerald-200 text-emerald-900 px-1.5 py-0.2 rounded font-mono font-bold ml-1">
+                            ✓ CORRETTA
+                          </span>
+                        )}
                       </span>
                       <span className="font-mono tabular-nums text-slate-900">
                         {c.counts.Verde} ({c.percentages.Verde}%)
                       </span>
                     </div>
-                    <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
+                    <div className="w-full bg-slate-200 rounded-full h-2.5 overflow-hidden">
                       <div
                         className="bg-emerald-600 h-full rounded-full transition-all duration-500"
                         style={{ width: `${c.percentages.Verde}%` }}
@@ -790,32 +921,7 @@ export const TeacherDebriefing: React.FC<TeacherDebriefingProps> = ({ onLogout }
                     </div>
                   </div>
 
-                  {/* Giallo */}
-                  <div
-                    className={`p-3 rounded-lg border ${
-                      c.correctCategory === 'Giallo'
-                        ? 'bg-amber-50 border-amber-300 ring-1 ring-amber-500'
-                        : 'bg-white border-slate-200'
-                    }`}
-                  >
-                    <div className="flex justify-between text-xs font-bold mb-1">
-                      <span className="text-amber-800 flex items-center gap-1">
-                        <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
-                        <span>Giallo</span>
-                      </span>
-                      <span className="font-mono tabular-nums text-slate-900">
-                        {c.counts.Giallo} ({c.percentages.Giallo}%)
-                      </span>
-                    </div>
-                    <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
-                      <div
-                        className="bg-amber-500 h-full rounded-full transition-all duration-500"
-                        style={{ width: `${c.percentages.Giallo}%` }}
-                      />
-                    </div>
-                  </div>
-
-                  {/* Rosso */}
+                  {/* Rosso (inclusi eventuali risposte con cautela) */}
                   <div
                     className={`p-3 rounded-lg border ${
                       c.correctCategory === 'Rosso'
@@ -826,16 +932,21 @@ export const TeacherDebriefing: React.FC<TeacherDebriefingProps> = ({ onLogout }
                     <div className="flex justify-between text-xs font-bold mb-1">
                       <span className="text-rose-800 flex items-center gap-1">
                         <span className="w-2.5 h-2.5 rounded-full bg-rose-600" />
-                        <span>Rosso</span>
+                        <span>Rossa · Da evitare / Cautela</span>
+                        {c.correctCategory === 'Rosso' && (
+                          <span className="text-[10px] bg-rose-200 text-rose-900 px-1.5 py-0.2 rounded font-mono font-bold ml-1">
+                            ✓ CORRETTA
+                          </span>
+                        )}
                       </span>
                       <span className="font-mono tabular-nums text-slate-900">
-                        {c.counts.Rosso} ({c.percentages.Rosso}%)
+                        {c.counts.Rosso + c.counts.Giallo} ({Math.min(100, c.percentages.Rosso + c.percentages.Giallo)}%)
                       </span>
                     </div>
-                    <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
+                    <div className="w-full bg-slate-200 rounded-full h-2.5 overflow-hidden">
                       <div
                         className="bg-rose-600 h-full rounded-full transition-all duration-500"
-                        style={{ width: `${c.percentages.Rosso}%` }}
+                        style={{ width: `${Math.min(100, c.percentages.Rosso + c.percentages.Giallo)}%` }}
                       />
                     </div>
                   </div>
@@ -866,6 +977,79 @@ export const TeacherDebriefing: React.FC<TeacherDebriefingProps> = ({ onLogout }
           );
         })}
       </div>
+
+      {/* ========================================================= */}
+      {/* CHANGELOG & VERSION REGISTER MODAL (Visible only in Reserved Area) */}
+      {/* ========================================================= */}
+      {showChangelogModal && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full p-6 sm:p-7 border border-slate-200 max-h-[85vh] flex flex-col">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-200">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-teal-50 rounded-xl text-teal-800 border border-teal-200">
+                  <History className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-slate-900">
+                    Registro Versioni & Changelog
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Area Riservata · Pietro Citarella (Versione corrente: {APP_VERSION})
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowChangelogModal(false)}
+                className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg hover:bg-slate-100 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="overflow-y-auto py-5 space-y-6 flex-1 pr-1">
+              {CHANGELOG_ENTRIES.map((entry) => (
+                <div
+                  key={entry.version}
+                  className="bg-slate-50/70 rounded-xl p-4 sm:p-5 border border-slate-200"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2 mb-2 pb-2 border-b border-slate-200/70">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono font-bold text-sm bg-teal-900 text-teal-100 px-2.5 py-0.5 rounded-md">
+                        {entry.version}
+                      </span>
+                      <h4 className="font-bold text-slate-900 text-sm">{entry.title}</h4>
+                      {entry.badge && (
+                        <span className="text-[10px] font-bold uppercase tracking-wider bg-emerald-100 text-emerald-900 border border-emerald-300 px-2 py-0.5 rounded-full">
+                          {entry.badge}
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-xs text-slate-500 font-medium">{entry.date}</span>
+                  </div>
+
+                  <ul className="space-y-1.5 text-xs text-slate-700">
+                    {entry.changes.map((change, i) => (
+                      <li key={i} className="flex items-start gap-2 leading-relaxed">
+                        <span className="text-teal-700 font-bold shrink-0 mt-0.5">•</span>
+                        <span>{change}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+
+            <div className="pt-4 border-t border-slate-200 flex justify-end">
+              <button
+                onClick={() => setShowChangelogModal(false)}
+                className="px-5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-colors shadow-xs"
+              >
+                Chiudi Changelog
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

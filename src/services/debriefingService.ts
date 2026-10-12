@@ -3,6 +3,7 @@ import { TRAFFIC_LIGHT_CASES } from '../data/courseData';
 
 const STORAGE_KEY = 'pa_social_anonymous_submissions';
 const ACTIVE_SESSION_KEY = 'pa_social_active_session';
+const SESSION_OPEN_KEY = 'pa_social_session_open';
 const CHANNEL_NAME = 'pa_social_debriefing_channel';
 
 export const CLASSROOM_SESSIONS: ClassroomSessionInfo[] = [
@@ -115,6 +116,35 @@ if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
 }
 
 export const debriefingService = {
+  // Check if current classroom session is opened by teacher
+  isSessionOpen(): boolean {
+    if (typeof window === 'undefined') return false;
+    const stored = localStorage.getItem(SESSION_OPEN_KEY);
+    return stored === 'true';
+  },
+
+  // Open or close classroom test for students
+  setSessionOpen(isOpen: boolean, sessionId?: ClassroomSessionId): void {
+    if (typeof window === 'undefined') return;
+    localStorage.setItem(SESSION_OPEN_KEY, isOpen ? 'true' : 'false');
+    if (sessionId) {
+      localStorage.setItem(ACTIVE_SESSION_KEY, sessionId);
+    }
+    const targetSession = sessionId || this.getActiveSessionId();
+    window.dispatchEvent(
+      new CustomEvent('pa_debriefing_session_status', { detail: { isOpen, sessionId: targetSession } })
+    );
+    window.dispatchEvent(new CustomEvent('pa_debriefing_session_change', { detail: targetSession }));
+    broadcastChannel?.postMessage({ type: 'SESSION_STATUS', isOpen, sessionId: targetSession });
+
+    // Sync active session and open state with server
+    fetch('/api/responses/active-session', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId: targetSession, isOpen }),
+    }).catch(() => {});
+  },
+
   // Get active session ID
   getActiveSessionId(): ClassroomSessionId {
     if (typeof window === 'undefined') return '27_ottobre_mattina';
@@ -136,7 +166,7 @@ export const debriefingService = {
     fetch('/api/responses/active-session', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sessionId }),
+      body: JSON.stringify({ sessionId, isOpen: this.isSessionOpen() }),
     }).catch(() => {});
   },
 
@@ -208,6 +238,9 @@ export const debriefingService = {
           if (data.activeSessionId && CLASSROOM_SESSIONS.some((s) => s.id === data.activeSessionId)) {
             localStorage.setItem(ACTIVE_SESSION_KEY, data.activeSessionId);
           }
+          if (typeof data.isSessionOpen === 'boolean') {
+            localStorage.setItem(SESSION_OPEN_KEY, data.isSessionOpen ? 'true' : 'false');
+          }
           return data.submissions;
         }
       }
@@ -232,13 +265,14 @@ export const debriefingService = {
 
     const handleCustom = () => callback();
     const handleStorage = (e: StorageEvent) => {
-      if (e.key === STORAGE_KEY || e.key === ACTIVE_SESSION_KEY) callback();
+      if (e.key === STORAGE_KEY || e.key === ACTIVE_SESSION_KEY || e.key === SESSION_OPEN_KEY) callback();
     };
     const handleBroadcast = (msg: MessageEvent) => {
       if (
         msg.data?.type === 'NEW_SUBMISSION' ||
         msg.data?.type === 'RESET' ||
-        msg.data?.type === 'SESSION_CHANGE'
+        msg.data?.type === 'SESSION_CHANGE' ||
+        msg.data?.type === 'SESSION_STATUS'
       ) {
         callback();
       }
@@ -246,12 +280,14 @@ export const debriefingService = {
 
     window.addEventListener('pa_debriefing_update', handleCustom);
     window.addEventListener('pa_debriefing_session_change', handleCustom);
+    window.addEventListener('pa_debriefing_session_status', handleCustom);
     window.addEventListener('storage', handleStorage);
     broadcastChannel?.addEventListener('message', handleBroadcast);
 
     return () => {
       window.removeEventListener('pa_debriefing_update', handleCustom);
       window.removeEventListener('pa_debriefing_session_change', handleCustom);
+      window.removeEventListener('pa_debriefing_session_status', handleCustom);
       window.removeEventListener('storage', handleStorage);
       broadcastChannel?.removeEventListener('message', handleBroadcast);
     };
@@ -371,25 +407,23 @@ export const debriefingService = {
   seedSampleClassroom(sessionId: ClassroomSessionId, count = 26): void {
     const mockSubmissions: AnonymousSubmission[] = [];
 
-    const distributions: Record<string, [number, number, number]> = {
-      'case-1': [70, 20, 10],
-      'case-2': [85, 10, 5],
-      'case-3': [25, 45, 30],
-      'case-4': [15, 60, 25],
-      'case-5': [20, 55, 25],
-      'case-6': [5, 15, 80],
-      'case-7': [5, 10, 85],
-      'case-8': [10, 25, 65],
+    // Binary distributions: [% Verde, % Rosso]
+    const distributions: Record<string, [number, number]> = {
+      'case-1': [85, 15], // Verde
+      'case-2': [90, 10], // Verde
+      'case-3': [25, 75], // Rosso
+      'case-4': [20, 80], // Rosso
+      'case-5': [22, 78], // Rosso
+      'case-6': [8, 92],  // Rosso
+      'case-7': [5, 95],  // Rosso
+      'case-8': [12, 88], // Rosso
     };
 
     TRAFFIC_LIGHT_CASES.forEach((c) => {
-      const dist = distributions[c.id] || [33, 33, 34];
+      const dist = distributions[c.id] || [50, 50];
       for (let i = 0; i < count; i++) {
         const rand = Math.random() * 100;
-        let choice: 'Verde' | 'Giallo' | 'Rosso' = 'Verde';
-        if (rand < dist[0]) choice = 'Verde';
-        else if (rand < dist[0] + dist[1]) choice = 'Giallo';
-        else choice = 'Rosso';
+        const choice: 'Verde' | 'Rosso' = rand < dist[0] ? 'Verde' : 'Rosso';
 
         mockSubmissions.push({
           id: `seed-${sessionId}-${c.id}-${i}-${Math.random().toString(36).substring(2, 6)}`,

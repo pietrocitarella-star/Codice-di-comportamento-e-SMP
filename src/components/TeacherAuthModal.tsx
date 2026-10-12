@@ -79,7 +79,7 @@ export const TeacherAuthModal: React.FC<TeacherAuthModalProps> = ({
                   setPin(e.target.value);
                   setError(false);
                 }}
-                placeholder="PIN (es. 2204)"
+                placeholder="Inserisci PIN"
                 autoFocus
                 className={`w-full text-center text-lg tracking-widest font-mono p-2.5 rounded-lg border ${
                   error
@@ -102,7 +102,7 @@ export const TeacherAuthModal: React.FC<TeacherAuthModalProps> = ({
               </p>
             )}
             <p className="text-[11px] text-slate-400 mt-1.5 text-center">
-              (PIN riservato per il formatore: <strong className="text-slate-600 font-mono">2204</strong>)
+              Inserisci il codice segreto per accedere alle statistiche e alla gestione delle aule.
             </p>
           </div>
 
