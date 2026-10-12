@@ -14,6 +14,7 @@ app.use(express.json());
 // In-memory submissions store with persistence to data/submissions.json
 const DATA_DIR = path.join(__dirname, 'data');
 const DATA_FILE = path.join(DATA_DIR, 'submissions.json');
+const SESSION_STATE_FILE = path.join(DATA_DIR, 'session_state.json');
 
 interface Submission {
   id: string;
@@ -25,7 +26,7 @@ interface Submission {
 
 let submissions: Submission[] = [];
 let activeSessionId: string = '27_ottobre_mattina';
-let isSessionOpen: boolean = false; // Initially closed until teacher explicitly opens it!
+let isSessionOpen: boolean = true; // Default to true if open or restore from state file
 
 try {
   if (!fs.existsSync(DATA_DIR)) {
@@ -33,6 +34,11 @@ try {
   }
   if (fs.existsSync(DATA_FILE)) {
     submissions = JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8'));
+  }
+  if (fs.existsSync(SESSION_STATE_FILE)) {
+    const state = JSON.parse(fs.readFileSync(SESSION_STATE_FILE, 'utf-8'));
+    if (state.activeSessionId) activeSessionId = state.activeSessionId;
+    if (typeof state.isSessionOpen === 'boolean') isSessionOpen = state.isSessionOpen;
   }
 } catch (e) {
   console.warn('File initialization warning:', e);
@@ -43,6 +49,14 @@ function persistSubmissions() {
     fs.writeFileSync(DATA_FILE, JSON.stringify(submissions, null, 2));
   } catch (e) {
     console.warn('Could not persist submissions to disk:', e);
+  }
+}
+
+function persistSessionState() {
+  try {
+    fs.writeFileSync(SESSION_STATE_FILE, JSON.stringify({ activeSessionId, isSessionOpen }, null, 2));
+  } catch (e) {
+    console.warn('Could not persist session state to disk:', e);
   }
 }
 
@@ -98,6 +112,7 @@ app.post('/api/responses/active-session', (req, res) => {
   if (typeof isOpen === 'boolean') {
     isSessionOpen = isOpen;
   }
+  persistSessionState();
   res.json({ success: true, activeSessionId, isSessionOpen });
 });
 

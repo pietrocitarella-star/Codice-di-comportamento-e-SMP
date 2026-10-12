@@ -13,11 +13,13 @@ import {
   HelpCircle,
   Calendar,
   Lock,
+  Unlock,
   Send,
   Check,
   AlertCircle,
   FileCheck2,
   ShieldCheck,
+  RefreshCw,
 } from 'lucide-react';
 
 // Smart shuffle function to interleave the 2 greens among the 6 reds
@@ -102,26 +104,30 @@ export const ScenarioSimulator: React.FC = () => {
 
   const [confirmSubmitOpen, setConfirmSubmitOpen] = useState(false);
   const [justSubmittedNotice, setJustSubmittedNotice] = useState(false);
+  const [isRefreshingState, setIsRefreshingState] = useState(false);
 
-  // Listen to session changes, open/close status, and reshuffle from teacher
+  const syncStateFromService = () => {
+    const newSession = debriefingService.getActiveSessionId();
+    const openState = debriefingService.isSessionOpen();
+    setCurrentSessionId(newSession);
+    setIsLabOpen(openState);
+
+    try {
+      const savedSubmitted = localStorage.getItem(`pa_test_submitted_${newSession}`) === 'true';
+      setIsSubmitted(savedSubmitted);
+      const savedAnswers = localStorage.getItem(`pa_student_answers_${newSession}`);
+      if (savedAnswers) {
+        setStudentAnswers(JSON.parse(savedAnswers));
+      }
+    } catch {
+      // ignore
+    }
+  };
+
+  // Listen to session changes, open/close status, and reshuffle from teacher + POLLING
   useEffect(() => {
     const unsub = debriefingService.onUpdate(() => {
-      const newSession = debriefingService.getActiveSessionId();
-      const openState = debriefingService.isSessionOpen();
-      setCurrentSessionId(newSession);
-      setIsLabOpen(openState);
-
-      // Reload submitted status and answers if session changed
-      try {
-        const savedSubmitted = localStorage.getItem(`pa_test_submitted_${newSession}`) === 'true';
-        setIsSubmitted(savedSubmitted);
-        const savedAnswers = localStorage.getItem(`pa_student_answers_${newSession}`);
-        if (savedAnswers) {
-          setStudentAnswers(JSON.parse(savedAnswers));
-        }
-      } catch {
-        // ignore
-      }
+      syncStateFromService();
     });
 
     const unsubShuffle = debriefingService.onShuffle(() => {
@@ -129,15 +135,22 @@ export const ScenarioSimulator: React.FC = () => {
       setCurrentIndex(0);
     });
 
-    // Also sync from server to get freshest lab open state
+    // Initial sync
     debriefingService.syncFromServer().then(() => {
-      setIsLabOpen(debriefingService.isSessionOpen());
-      setCurrentSessionId(debriefingService.getActiveSessionId());
+      syncStateFromService();
     });
+
+    // Periodic polling every 3 seconds to catch teacher opening/closing aula across separate devices
+    const pollTimer = setInterval(() => {
+      debriefingService.syncFromServer().then(() => {
+        syncStateFromService();
+      });
+    }, 3000);
 
     return () => {
       unsub();
       unsubShuffle();
+      clearInterval(pollTimer);
     };
   }, []);
 
@@ -157,6 +170,27 @@ export const ScenarioSimulator: React.FC = () => {
   const currentAnswer = activeCase ? studentAnswers[activeCase.id] : undefined;
 
   const currentSessionInfo = CLASSROOM_SESSIONS.find((s) => s.id === currentSessionId);
+
+  // Manual refresh button
+  const handleManualRefresh = async () => {
+    setIsRefreshingState(true);
+    await debriefingService.syncFromServer();
+    syncStateFromService();
+    setTimeout(() => setIsRefreshingState(false), 500);
+  };
+
+  // Classroom selection change by student (if needed)
+  const handleSelectClassroom = (newId: ClassroomSessionId) => {
+    setCurrentSessionId(newId);
+    try {
+      const savedSubmitted = localStorage.getItem(`pa_test_submitted_${newId}`) === 'true';
+      setIsSubmitted(savedSubmitted);
+      const savedAnswers = localStorage.getItem(`pa_student_answers_${newId}`);
+      setStudentAnswers(savedAnswers ? JSON.parse(savedAnswers) : {});
+    } catch {
+      // ignore
+    }
+  };
 
   // Handle clicking an option -> opens confirmation modal
   const handleInitiateChoice = (choice: 'Verde' | 'Rosso') => {
@@ -196,11 +230,12 @@ export const ScenarioSimulator: React.FC = () => {
     }
   };
 
-  // Reset test (for practicing again if not locked by server)
+  // Reset test (for practicing again or re-taking)
   const handleResetTest = () => {
     setStudentAnswers({});
     setIsSubmitted(false);
     setCurrentIndex(0);
+    setJustSubmittedNotice(false);
     try {
       localStorage.removeItem(`pa_student_answers_${currentSessionId}`);
       localStorage.removeItem(`pa_test_submitted_${currentSessionId}`);
@@ -254,10 +289,11 @@ export const ScenarioSimulator: React.FC = () => {
             {isSubmitted && (
               <button
                 onClick={handleResetTest}
-                title="Ricomincia il test"
-                className="p-2 text-slate-500 hover:text-slate-800 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors"
+                title="Ricomincia il test da zero per una nuova prova"
+                className="inline-flex items-center gap-1.5 p-2 px-3 text-xs font-semibold text-teal-800 bg-teal-50 hover:bg-teal-100 rounded-lg border border-teal-200 transition-colors"
               >
-                <RotateCcw className="w-4 h-4" />
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>Rifai Test</span>
               </button>
             )}
           </div>
@@ -274,17 +310,35 @@ export const ScenarioSimulator: React.FC = () => {
             ) : (
               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-50 text-amber-800 border border-amber-300 font-semibold text-[11px]">
                 <Lock className="w-3 h-3 text-amber-700" />
-                <span>Laboratorio Chiuso (In attesa di apertura dal formatore)</span>
+                <span>Laboratorio Chiuso (In attesa di apertura dal docente)</span>
               </span>
             )}
+
+            {/* Refresh button to force sync */}
+            <button
+              onClick={handleManualRefresh}
+              disabled={isRefreshingState}
+              className="p-1 text-slate-400 hover:text-slate-600 rounded"
+              title="Aggiorna stato aula dal server"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isRefreshingState ? 'animate-spin text-teal-600' : ''}`} />
+            </button>
           </div>
 
           <div className="flex items-center gap-1.5 bg-teal-50/80 text-teal-900 px-3 py-1.5 rounded-lg border border-teal-200/80 shrink-0">
             <Calendar className="w-3.5 h-3.5 text-teal-800 shrink-0" />
-            <span className="font-semibold text-slate-600">Aula Assegnata:</span>
-            <span className="font-bold text-teal-950">
-              {currentSessionInfo?.label || currentSessionId}
-            </span>
+            <span className="font-semibold text-slate-600">Aula:</span>
+            <select
+              value={currentSessionId}
+              onChange={(e) => handleSelectClassroom(e.target.value as ClassroomSessionId)}
+              className="bg-transparent font-bold text-teal-950 border-none focus:outline-none cursor-pointer text-xs"
+            >
+              {CLASSROOM_SESSIONS.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.label}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
       </div>
@@ -296,50 +350,60 @@ export const ScenarioSimulator: React.FC = () => {
             <div className="p-3 bg-amber-100 text-amber-800 rounded-xl shrink-0">
               <Lock className="w-6 h-6" />
             </div>
-            <div className="space-y-2">
+            <div className="space-y-2 flex-1">
               <h3 className="text-base font-bold text-amber-950">
                 Laboratorio Attualmente Chiuso
               </h3>
               <p className="text-xs sm:text-sm text-amber-900 leading-relaxed max-w-3xl">
                 La raccolta delle risposte per l'aula <strong>{currentSessionInfo?.label}</strong> non
                 è al momento aperta. Il formatore (Pietro Citarella) deve prima attivare la sessione
-                dalla propria <em>Area Riservata</em>. Non appena il formatore aprirà l'aula, questa pagina
-                si sbloccherà automaticamente consentendoti di rispondere.
+                dalla propria <em>Area Riservata</em>. Non appena il docente aprirà l'aula, questa pagina
+                si sbloccherà automaticamente (la verifica avviene automaticamente ogni pochi secondi).
               </p>
-              <div className="pt-1 flex items-center gap-2 text-xs font-semibold text-amber-800">
-                <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping" />
-                <span>In ascolto dell'avvio della sessione...</span>
+              <div className="pt-2 flex flex-wrap items-center gap-3">
+                <button
+                  onClick={handleManualRefresh}
+                  disabled={isRefreshingState}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-200/70 hover:bg-amber-200 text-amber-950 font-semibold text-xs rounded-lg transition-colors border border-amber-300"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isRefreshingState ? 'animate-spin' : ''}`} />
+                  <span>Verifica apertura ora</span>
+                </button>
+                <div className="flex items-center gap-2 text-xs font-semibold text-amber-800">
+                  <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping" />
+                  <span>In attesa dell'avvio in aula...</span>
+                </div>
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Just submitted banner notice */}
-      {justSubmittedNotice && isSubmitted && (
+      {/* Already Submitted Banner with Repeat Test Option */}
+      {isSubmitted && (
         <div className="bg-emerald-50 border border-emerald-300 rounded-2xl p-6 shadow-xs animate-fadeIn">
-          <div className="flex items-start justify-between gap-4">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div className="flex items-start gap-3">
               <CheckCircle2 className="w-6 h-6 text-emerald-600 shrink-0 mt-0.5" />
               <div>
                 <h3 className="text-base font-bold text-emerald-950">
-                  Test Concluso con Successo!
+                  Test Concluso! Risposte Registrate per l'Aula
                 </h3>
                 <p className="text-xs sm:text-sm text-emerald-900 mt-0.5 leading-relaxed">
-                  Le tue risposte anonime sono state registrate nel sistema per il debriefing d'aula.
-                  Punteggio ottenuto:{' '}
-                  <strong className="text-emerald-950 font-mono">
+                  Le tue risposte anonime sono state registrate con successo. Punteggio:{' '}
+                  <strong className="text-emerald-950 font-mono font-bold">
                     {correctCount} su {totalCases} corrette ({Math.round((correctCount / totalCases) * 100)}%)
                   </strong>
-                  . Puoi ora navigare tra i casi per analizzare i verdetti e le motivazioni giuridiche.
+                  . Puoi sfogliare i casi per leggere i verdetti giuridici del Codice.
                 </p>
               </div>
             </div>
             <button
-              onClick={() => setJustSubmittedNotice(false)}
-              className="text-emerald-700 hover:text-emerald-900 text-xs font-bold px-2 py-1"
+              onClick={handleResetTest}
+              className="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-800 hover:bg-emerald-900 text-white rounded-xl text-xs font-bold transition-all shadow-xs shrink-0 cursor-pointer"
             >
-              Chiudi
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>Ricomincia Nuova Prova</span>
             </button>
           </div>
         </div>
@@ -352,7 +416,7 @@ export const ScenarioSimulator: React.FC = () => {
             Seleziona o Scorri tra i Casi ({currentIndex + 1} di {totalCases}):
           </span>
           <span className="text-xs text-slate-500 font-medium">
-            {answeredCount} di {totalCases} risposte registrate
+            {answeredCount} di {totalCases} risposte impostate
           </span>
         </div>
 
@@ -583,7 +647,7 @@ export const ScenarioSimulator: React.FC = () => {
               className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-xs transition-colors ${
                 currentIndex === 0
                   ? 'text-slate-300 bg-slate-50 cursor-not-allowed border border-slate-100'
-                  : 'text-slate-700 bg-white hover:bg-slate-50 border border-slate-300'
+                  : 'text-slate-700 bg-white hover:bg-slate-50 border border-slate-300 cursor-pointer'
               }`}
             >
               <ArrowLeft className="w-4 h-4" />
@@ -608,7 +672,7 @@ export const ScenarioSimulator: React.FC = () => {
               {currentIndex < totalCases - 1 && (
                 <button
                   onClick={() => setCurrentIndex((prev) => Math.min(totalCases - 1, prev + 1))}
-                  className="inline-flex items-center gap-2 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold text-xs rounded-xl transition-colors"
+                  className="inline-flex items-center gap-2 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold text-xs rounded-xl transition-colors cursor-pointer"
                 >
                   <span>Caso Successivo</span>
                   <ArrowRight className="w-4 h-4" />
@@ -698,14 +762,14 @@ export const ScenarioSimulator: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setPendingChoice(null)}
-                className="flex-1 py-2.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors border border-slate-200"
+                className="flex-1 py-2.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors border border-slate-200 cursor-pointer"
               >
                 Annulla
               </button>
               <button
                 type="button"
                 onClick={handleConfirmChoice}
-                className="flex-1 py-2.5 text-xs font-bold text-white bg-teal-800 hover:bg-teal-900 rounded-xl transition-colors shadow-xs"
+                className="flex-1 py-2.5 text-xs font-bold text-white bg-teal-800 hover:bg-teal-900 rounded-xl transition-colors shadow-xs cursor-pointer"
               >
                 Conferma Risposta
               </button>
@@ -761,14 +825,14 @@ export const ScenarioSimulator: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setConfirmSubmitOpen(false)}
-                className="flex-1 py-2.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors border border-slate-200"
+                className="flex-1 py-2.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors border border-slate-200 cursor-pointer"
               >
                 Torna Indietro per Modificare
               </button>
               <button
                 type="button"
                 onClick={handleFinalSubmit}
-                className="flex-1 py-2.5 text-xs font-bold text-white bg-teal-800 hover:bg-teal-900 rounded-xl transition-colors shadow-sm"
+                className="flex-1 py-2.5 text-xs font-bold text-white bg-teal-800 hover:bg-teal-900 rounded-xl transition-colors shadow-sm cursor-pointer"
               >
                 Sì, Invia Definitivamente
               </button>

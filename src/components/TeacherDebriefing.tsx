@@ -172,8 +172,14 @@ export const TeacherDebriefing: React.FC<TeacherDebriefingProps> = ({ onLogout }
   const handleResetConfirmed = () => {
     if (resetTarget === 'all') {
       debriefingService.clearSubmissions('all');
+      CLASSROOM_SESSIONS.forEach((s) => {
+        localStorage.removeItem(`pa_test_submitted_${s.id}`);
+        localStorage.removeItem(`pa_student_answers_${s.id}`);
+      });
     } else {
       debriefingService.clearSubmissions(selectedSession);
+      localStorage.removeItem(`pa_test_submitted_${selectedSession}`);
+      localStorage.removeItem(`pa_student_answers_${selectedSession}`);
     }
     setStats(debriefingService.getDebriefStats(selectedSession));
     setConfirmResetOpen(false);
@@ -514,16 +520,31 @@ export const TeacherDebriefing: React.FC<TeacherDebriefingProps> = ({ onLogout }
               </div>
             </div>
 
-            {/* Toggle open / close button */}
-            <div className="flex items-center gap-2 shrink-0 w-full md:w-auto">
+            {/* Action buttons for opening, closing, or switching classroom */}
+            <div className="flex flex-wrap items-center gap-2 shrink-0 w-full md:w-auto">
               {isLabOpen ? (
-                <button
-                  onClick={() => handleToggleLabOpen(false)}
-                  className="w-full md:w-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 rounded-xl text-xs font-bold transition-all shadow-xs"
-                >
-                  <Lock className="w-4 h-4" />
-                  <span>Chiudi Laboratorio (Blocca Risposte)</span>
-                </button>
+                <>
+                  {selectedSession !== 'all' && activeSessionGlobal !== selectedSession && (
+                    <button
+                      onClick={() => handleToggleLabOpen(true, selectedSession)}
+                      className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold transition-all shadow-sm"
+                      title="Attiva questa specifica aula e aprila per i corsisti"
+                    >
+                      <Unlock className="w-4 h-4" />
+                      <span>
+                        Apri quest'Aula per i Corsisti ({CLASSROOM_SESSIONS.find((s) => s.id === selectedSession)?.slot})
+                      </span>
+                    </button>
+                  )}
+                  <button
+                    onClick={() => handleToggleLabOpen(false)}
+                    className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 rounded-xl text-xs font-bold transition-all shadow-xs"
+                    title="Blocca l'invio delle risposte per tutti i corsisti"
+                  >
+                    <Lock className="w-4 h-4" />
+                    <span>Chiudi Laboratorio (Blocca Risposte)</span>
+                  </button>
+                </>
               ) : (
                 <button
                   onClick={() =>

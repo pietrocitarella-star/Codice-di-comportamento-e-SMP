@@ -8,11 +8,13 @@ import { QuizSection } from './components/QuizSection';
 import { VademecumModal } from './components/VademecumModal';
 import { TeacherDebriefing } from './components/TeacherDebriefing';
 import { TeacherAuthModal } from './components/TeacherAuthModal';
-import { BookOpen, HelpCircle, FileCheck, Award, Shield, Lock, LogOut } from 'lucide-react';
+import { PrivacyModal } from './components/PrivacyModal';
+import { BookOpen, HelpCircle, FileCheck, Award, Shield, Lock, LogOut, ShieldCheck } from 'lucide-react';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabType>('guida');
   const [isVademecumOpen, setIsVademecumOpen] = useState(false);
+  const [isPrivacyOpen, setIsPrivacyOpen] = useState(false);
   const [hasCompletedQuiz, setHasCompletedQuiz] = useState(false);
 
   // Private teacher authentication state
@@ -53,6 +55,7 @@ export default function App() {
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         onOpenVademecum={() => setIsVademecumOpen(true)}
+        onOpenPrivacy={() => setIsPrivacyOpen(true)}
         completedQuiz={hasCompletedQuiz}
       />
 
@@ -156,19 +159,33 @@ export default function App() {
 
           <div className="flex flex-col items-center md:items-end gap-2 text-[11px] text-slate-400">
             <p>Progetto formativo a cura di Pietro Citarella</p>
-            {/* Discrete Teacher Area Access Button */}
-            <button
-              onClick={handleOpenTeacherArea}
-              className="inline-flex items-center gap-1.5 text-slate-400 hover:text-teal-300 transition-colors py-1 px-2.5 rounded hover:bg-slate-800 text-[11px] cursor-pointer"
-              title="Accesso riservato al formatore per il debriefing delle risposte anonime"
-            >
-              <Lock className="w-3.5 h-3.5 text-slate-500" />
-              <span>
-                {isTeacherAuthenticated
-                  ? 'Area Riservata: Debriefing (Aperta)'
-                  : 'Area Riservata (PIN)'}
-              </span>
-            </button>
+            <div className="flex flex-wrap items-center justify-center md:justify-end gap-2.5 pt-0.5">
+              {/* Privacy Policy Trigger */}
+              <button
+                onClick={() => setIsPrivacyOpen(true)}
+                className="inline-flex items-center gap-1.5 text-slate-400 hover:text-teal-300 transition-colors py-1 px-2.5 rounded hover:bg-slate-800 text-[11px] cursor-pointer"
+                title="Informativa sulla privacy: nessun dato personale raccolto"
+              >
+                <ShieldCheck className="w-3.5 h-3.5 text-teal-400" />
+                <span>Informativa Privacy</span>
+              </button>
+
+              <span className="text-slate-700 hidden sm:inline" aria-hidden="true">·</span>
+
+              {/* Discrete Teacher Area Access Button */}
+              <button
+                onClick={handleOpenTeacherArea}
+                className="inline-flex items-center gap-1.5 text-slate-400 hover:text-teal-300 transition-colors py-1 px-2.5 rounded hover:bg-slate-800 text-[11px] cursor-pointer"
+                title="Accesso riservato al formatore per il debriefing delle risposte anonime"
+              >
+                <Lock className="w-3.5 h-3.5 text-slate-500" />
+                <span>
+                  {isTeacherAuthenticated
+                    ? 'Area Riservata: Debriefing (Aperta)'
+                    : 'Area Riservata (PIN)'}
+                </span>
+              </button>
+            </div>
           </div>
         </div>
       </footer>
@@ -177,6 +194,12 @@ export default function App() {
       <VademecumModal
         isOpen={isVademecumOpen}
         onClose={() => setIsVademecumOpen(false)}
+      />
+
+      {/* Privacy Policy Modal */}
+      <PrivacyModal
+        isOpen={isPrivacyOpen}
+        onClose={() => setIsPrivacyOpen(false)}
       />
 
       {/* Teacher Authentication Modal */}

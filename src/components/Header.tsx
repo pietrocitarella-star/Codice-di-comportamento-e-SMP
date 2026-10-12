@@ -1,11 +1,12 @@
 import React from 'react';
 import { TabType } from '../types';
-import { Download, Award } from 'lucide-react';
+import { Download, Award, ShieldCheck } from 'lucide-react';
 
 interface HeaderProps {
   activeTab: TabType;
   setActiveTab: (tab: TabType) => void;
   onOpenVademecum: () => void;
+  onOpenPrivacy?: () => void;
   completedQuiz: boolean;
 }
 
@@ -13,6 +14,7 @@ export const Header: React.FC<HeaderProps> = ({
   activeTab,
   setActiveTab,
   onOpenVademecum,
+  onOpenPrivacy,
   completedQuiz,
 }) => {
   return (
@@ -53,11 +55,21 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
           </nav>
 
-          {/* Zone 3: 1 primary action */}
+          {/* Zone 3: Actions */}
           <div className="flex items-center gap-2 shrink-0">
+            {onOpenPrivacy && (
+              <button
+                onClick={onOpenPrivacy}
+                className="hidden sm:inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-slate-600 hover:text-teal-900 rounded-lg hover:bg-slate-100 transition-colors whitespace-nowrap cursor-pointer"
+                title="Informativa sulla privacy: nessun dato personale raccolto"
+              >
+                <ShieldCheck className="w-3.5 h-3.5 text-teal-700" />
+                <span>Privacy</span>
+              </button>
+            )}
             <button
               onClick={onOpenVademecum}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-teal-800 rounded-lg hover:bg-teal-900 transition-colors shadow-sm whitespace-nowrap"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-teal-800 rounded-lg hover:bg-teal-900 transition-colors shadow-sm whitespace-nowrap cursor-pointer"
             >
               <Download className="w-3.5 h-3.5" />
               <span>Vademecum PDF</span>

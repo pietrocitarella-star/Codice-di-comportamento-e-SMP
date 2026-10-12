@@ -118,8 +118,10 @@ if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
 export const debriefingService = {
   // Check if current classroom session is opened by teacher
   isSessionOpen(): boolean {
-    if (typeof window === 'undefined') return false;
+    if (typeof window === 'undefined') return true;
     const stored = localStorage.getItem(SESSION_OPEN_KEY);
+    // If not set yet, default to true so first-time visitors aren't blocked prior to fetch
+    if (stored === null) return true;
     return stored === 'true';
   },
 
@@ -241,6 +243,13 @@ export const debriefingService = {
           if (typeof data.isSessionOpen === 'boolean') {
             localStorage.setItem(SESSION_OPEN_KEY, data.isSessionOpen ? 'true' : 'false');
           }
+          // Notify any listening components
+          window.dispatchEvent(
+            new CustomEvent('pa_debriefing_session_status', {
+              detail: { isOpen: data.isSessionOpen, sessionId: data.activeSessionId },
+            })
+          );
+          window.dispatchEvent(new CustomEvent('pa_debriefing_session_change', { detail: data.activeSessionId }));
           return data.submissions;
         }
       }
