@@ -26,7 +26,13 @@ interface Submission {
 
 let submissions: Submission[] = [];
 let activeSessionId: string = '27_ottobre_mattina';
-let isSessionOpen: boolean = true; // Default to true if open or restore from state file
+let isSessionOpen: boolean = true;
+let openSessions: Record<string, boolean> = {
+  '27_ottobre_mattina': true,
+  '27_ottobre_pomeriggio': false,
+  '28_ottobre_mattina': false,
+  '28_ottobre_pomeriggio': false,
+};
 
 try {
   if (!fs.existsSync(DATA_DIR)) {
@@ -39,6 +45,12 @@ try {
     const state = JSON.parse(fs.readFileSync(SESSION_STATE_FILE, 'utf-8'));
     if (state.activeSessionId) activeSessionId = state.activeSessionId;
     if (typeof state.isSessionOpen === 'boolean') isSessionOpen = state.isSessionOpen;
+    if (state.openSessions && typeof state.openSessions === 'object') {
+      openSessions = { ...openSessions, ...state.openSessions };
+    } else {
+      // Migrate or initialize openSessions
+      openSessions[activeSessionId] = isSessionOpen;
+    }
   }
 } catch (e) {
   console.warn('File initialization warning:', e);
@@ -54,40 +66,59 @@ function persistSubmissions() {
 
 function persistSessionState() {
   try {
-    fs.writeFileSync(SESSION_STATE_FILE, JSON.stringify({ activeSessionId, isSessionOpen }, null, 2));
+    fs.writeFileSync(
+      SESSION_STATE_FILE,
+      JSON.stringify({ activeSessionId, isSessionOpen, openSessions }, null, 2)
+    );
   } catch (e) {
     console.warn('Could not persist session state to disk:', e);
   }
 }
 
+function isClassroomSessionOpen(sessionId: string): boolean {
+  if (sessionId in openSessions) {
+    return Boolean(openSessions[sessionId]);
+  }
+  return isSessionOpen;
+}
+
 // API Routes
 app.get('/api/responses', (req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+
   const session = req.query.session as string | undefined;
   if (session && session !== 'all') {
     res.json({
       activeSessionId,
       isSessionOpen,
+      openSessions,
       submissions: submissions.filter((s) => s.sessionId === session),
     });
   } else {
     res.json({
       activeSessionId,
       isSessionOpen,
+      openSessions,
       submissions,
     });
   }
 });
 
+// Single answer submission
 app.post('/api/responses', (req, res) => {
   const { caseId, choice, sessionId } = req.body;
   if (!caseId || !choice) {
     return res.status(400).json({ error: 'Missing parameters' });
   }
 
-  // Gating check: participants can only submit if lab session is opened by teacher
-  if (!isSessionOpen) {
+  const targetSession = sessionId || activeSessionId;
+
+  // Gating check: participants can only submit if target lab session is opened by teacher
+  if (!isClassroomSessionOpen(targetSession)) {
     return res.status(403).json({
-      error: 'Laboratorio attualmente chiuso. Il formatore non ha ancora aperto la sessione d\'aula per raccogliere le risposte.',
+      error: `Laboratorio attualmente chiuso per la sessione selezionata (${targetSession}). Il formatore non ha ancora aperto la sessione d'aula.`,
     });
   }
 
@@ -95,7 +126,7 @@ app.post('/api/responses', (req, res) => {
     id: `${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
     caseId,
     choice,
-    sessionId: sessionId || activeSessionId,
+    sessionId: targetSession,
     timestamp: Date.now(),
   };
 
@@ -104,16 +135,69 @@ app.post('/api/responses', (req, res) => {
   res.status(201).json({ success: true, submission: newSub });
 });
 
+// Atomic batch submissions (when learner clicks "Concludi e invia risposte")
+app.post('/api/responses/batch', (req, res) => {
+  const { answers, sessionId } = req.body;
+  if (!answers || typeof answers !== 'object') {
+    return res.status(400).json({ error: 'Missing or invalid answers object' });
+  }
+
+  const targetSession = sessionId || activeSessionId;
+
+  // Gating check
+  if (!isClassroomSessionOpen(targetSession)) {
+    return res.status(403).json({
+      error: `Laboratorio chiuso per l'aula ${targetSession}.`,
+    });
+  }
+
+  const newSubs: Submission[] = [];
+  const now = Date.now();
+
+  Object.entries(answers).forEach(([caseId, choice], idx) => {
+    if (choice === 'Verde' || choice === 'Rosso' || choice === 'Giallo') {
+      newSubs.push({
+        id: `${now}-${idx}-${Math.random().toString(36).substring(2, 6)}`,
+        caseId,
+        choice,
+        sessionId: targetSession,
+        timestamp: now,
+      });
+    }
+  });
+
+  submissions.push(...newSubs);
+  persistSubmissions();
+  res.status(201).json({ success: true, count: newSubs.length, submissions: newSubs });
+});
+
 app.post('/api/responses/active-session', (req, res) => {
-  const { sessionId, isOpen } = req.body;
+  const { sessionId, isOpen, openSessions: customOpenSessions, allOpen } = req.body;
+
   if (sessionId) {
     activeSessionId = sessionId;
   }
+
   if (typeof isOpen === 'boolean') {
     isSessionOpen = isOpen;
+    if (sessionId) {
+      openSessions[sessionId] = isOpen;
+    }
   }
+
+  if (typeof allOpen === 'boolean') {
+    isSessionOpen = allOpen;
+    Object.keys(openSessions).forEach((k) => {
+      openSessions[k] = allOpen;
+    });
+  }
+
+  if (customOpenSessions && typeof customOpenSessions === 'object') {
+    openSessions = { ...openSessions, ...customOpenSessions };
+  }
+
   persistSessionState();
-  res.json({ success: true, activeSessionId, isSessionOpen });
+  res.json({ success: true, activeSessionId, isSessionOpen, openSessions });
 });
 
 app.post('/api/responses/reset', (req, res) => {
@@ -130,6 +214,10 @@ app.post('/api/responses/reset', (req, res) => {
 // Seed classroom endpoint
 app.post('/api/responses/seed', (req, res) => {
   const { sessionId = '27_ottobre_mattina', count = 26 } = req.body;
+
+  // Remove previous simulated seed answers for this session first to prevent duplicate stacking
+  submissions = submissions.filter((s) => !s.id.startsWith(`seed-${sessionId}-`));
+
   const cases = [
     { id: 'case-1', dist: 85 }, // Verde
     { id: 'case-2', dist: 90 }, // Verde

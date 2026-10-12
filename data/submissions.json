@@ -1,0 +1,170 @@
+[
+  {
+    "id": "1791802882487-q4yqc",
+    "caseId": "case-3",
+    "choice": "Verde",
+    "sessionId": "27_ottobre_mattina",
+    "timestamp": 1791802882487
+  },
+  {
+    "id": "1791802882574-bfxy2",
+    "caseId": "case-4",
+    "choice": "Verde",
+    "sessionId": "27_ottobre_mattina",
+    "timestamp": 1791802882574
+  },
+  {
+    "id": "1791802882575-y42qx",
+    "caseId": "case-2",
+    "choice": "Rosso",
+    "sessionId": "27_ottobre_mattina",
+    "timestamp": 1791802882575
+  },
+  {
+    "id": "1791802882576-np7vk",
+    "caseId": "case-6",
+    "choice": "Rosso",
+    "sessionId": "27_ottobre_mattina",
+    "timestamp": 1791802882576
+  },
+  {
+    "id": "1791802882577-lu22c",
+    "caseId": "case-5",
+    "choice": "Rosso",
+    "sessionId": "27_ottobre_mattina",
+    "timestamp": 1791802882577
+  },
+  {
+    "id": "1791802882579-rrxwf",
+    "caseId": "case-8",
+    "choice": "Verde",
+    "sessionId": "27_ottobre_mattina",
+    "timestamp": 1791802882579
+  },
+  {
+    "id": "1791802883242-ka0z9",
+    "caseId": "case-7",
+    "choice": "Rosso",
+    "sessionId": "27_ottobre_mattina",
+    "timestamp": 1791802883242
+  },
+  {
+    "id": "1791802883243-cvven",
+    "caseId": "case-1",
+    "choice": "Verde",
+    "sessionId": "27_ottobre_mattina",
+    "timestamp": 1791802883243
+  },
+  {
+    "id": "seed-27_ottobre_mattina-case-1-0-4jvr",
+    "caseId": "case-1",
+    "choice": "Verde",
+    "sessionId": "27_ottobre_mattina",
+    "timestamp": 1791804967720
+  },
+  {
+    "id": "seed-27_ottobre_mattina-case-1-1-t5g9",
+    "caseId": "case-1",
+    "choice": "Verde",
+    "sessionId": "27_ottobre_mattina",
+    "timestamp": 1791808268537
+  },
+  {
+    "id": "seed-27_ottobre_mattina-case-2-0-g8hk",
+    "caseId": "case-2",
+    "choice": "Verde",
+    "sessionId": "27_ottobre_mattina",
+    "timestamp": 1791805206945
+  },
+  {
+    "id": "seed-27_ottobre_mattina-case-2-1-2so6",
+    "caseId": "case-2",
+    "choice": "Verde",
+    "sessionId": "27_ottobre_mattina",
+    "timestamp": 1791807448830
+  },
+  {
+    "id": "seed-27_ottobre_mattina-case-3-0-mlpn",
+    "caseId": "case-3",
+    "choice": "Verde",
+    "sessionId": "27_ottobre_mattina",
+    "timestamp": 1791808320321
+  },
+  {
+    "id": "seed-27_ottobre_mattina-case-3-1-cxdr",
+    "caseId": "case-3",
+    "choice": "Rosso",
+    "sessionId": "27_ottobre_mattina",
+    "timestamp": 1791807158438
+  },
+  {
+    "id": "seed-27_ottobre_mattina-case-4-0-cdtc",
+    "caseId": "case-4",
+    "choice": "Verde",
+    "sessionId": "27_ottobre_mattina",
+    "timestamp": 1791806481037
+  },
+  {
+    "id": "seed-27_ottobre_mattina-case-4-1-s6fo",
+    "caseId": "case-4",
+    "choice": "Rosso",
+    "sessionId": "27_ottobre_mattina",
+    "timestamp": 1791808348246
+  },
+  {
+    "id": "seed-27_ottobre_mattina-case-5-0-via2",
+    "caseId": "case-5",
+    "choice": "Rosso",
+    "sessionId": "27_ottobre_mattina",
+    "timestamp": 1791806940614
+  },
+  {
+    "id": "seed-27_ottobre_mattina-case-5-1-wfj9",
+    "caseId": "case-5",
+    "choice": "Rosso",
+    "sessionId": "27_ottobre_mattina",
+    "timestamp": 1791806487621
+  },
+  {
+    "id": "seed-27_ottobre_mattina-case-6-0-h85r",
+    "caseId": "case-6",
+    "choice": "Rosso",
+    "sessionId": "27_ottobre_mattina",
+    "timestamp": 1791805707355
+  },
+  {
+    "id": "seed-27_ottobre_mattina-case-6-1-he32",
+    "caseId": "case-6",
+    "choice": "Rosso",
+    "sessionId": "27_ottobre_mattina",
+    "timestamp": 1791807649986
+  },
+  {
+    "id": "seed-27_ottobre_mattina-case-7-0-fm53",
+    "caseId": "case-7",
+    "choice": "Rosso",
+    "sessionId": "27_ottobre_mattina",
+    "timestamp": 1791808042974
+  },
+  {
+    "id": "seed-27_ottobre_mattina-case-7-1-uvkr",
+    "caseId": "case-7",
+    "choice": "Rosso",
+    "sessionId": "27_ottobre_mattina",
+    "timestamp": 1791804897172
+  },
+  {
+    "id": "seed-27_ottobre_mattina-case-8-0-xw45",
+    "caseId": "case-8",
+    "choice": "Rosso",
+    "sessionId": "27_ottobre_mattina",
+    "timestamp": 1791807655202
+  },
+  {
+    "id": "seed-27_ottobre_mattina-case-8-1-72hl",
+    "caseId": "case-8",
+    "choice": "Rosso",
+    "sessionId": "27_ottobre_mattina",
+    "timestamp": 1791804986781
+  }
+]

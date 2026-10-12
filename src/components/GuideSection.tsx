@@ -563,40 +563,131 @@ export const GuideSection: React.FC<GuideSectionProps> = ({
           </div>
         </div>
 
-        {/* Responsive Table */}
-        <div className="overflow-x-auto rounded-xl border border-slate-200 mb-6">
-          <table className="w-full text-left text-xs border-collapse">
+        {/* Mobile View (Cards) - Shown on mobile phones for optimal readability */}
+        <div className="block md:hidden space-y-4 mb-6">
+          <div className="flex items-center justify-between text-[11px] text-slate-500 pb-1">
+            <span>Visualizzazione a schede ottimizzata per smartphone</span>
+            <span className="font-semibold text-teal-800 font-mono">
+              {filteredVademecum.length} {filteredVademecum.length === 1 ? 'ambito' : 'ambiti'}
+            </span>
+          </div>
+
+          {filteredVademecum.length === 0 ? (
+            <div className="p-6 text-center bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-500">
+              Nessun argomento trovato per la ricerca «{vademecumSearch}».
+            </div>
+          ) : (
+            filteredVademecum.map((row, idx) => (
+              <div
+                key={idx}
+                className="bg-slate-50/70 border border-slate-200 rounded-xl p-4 space-y-3 shadow-xs"
+              >
+                {/* Ambito Header */}
+                <div className="flex items-center justify-between border-b border-slate-200/80 pb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="w-6 h-6 rounded-lg bg-teal-900 text-white font-bold text-xs flex items-center justify-center shrink-0">
+                      {idx + 1}
+                    </span>
+                    <h3 className="font-bold text-slate-900 text-sm">{row.area}</h3>
+                  </div>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-teal-800 bg-teal-100/70 px-2 py-0.5 rounded">
+                    Guida PA
+                  </span>
+                </div>
+
+                {/* Cosa è Consentito (Green Box) */}
+                <div className="bg-emerald-50/90 border border-emerald-200 rounded-lg p-3 text-xs">
+                  <div className="flex items-center gap-1.5 font-bold text-emerald-900 mb-1">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span>Cosa è Consentito:</span>
+                  </div>
+                  <p className="text-emerald-950 text-xs leading-relaxed pl-5">
+                    {row.consentito}
+                  </p>
+                </div>
+
+                {/* Cosa è Vietato (Red Box) */}
+                <div className="bg-rose-50/90 border border-rose-200 rounded-lg p-3 text-xs">
+                  <div className="flex items-center gap-1.5 font-bold text-rose-900 mb-1">
+                    <XCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                    <span>Cosa è Vietato:</span>
+                  </div>
+                  <p className="text-rose-950 text-xs leading-relaxed pl-5">
+                    {row.vietato}
+                  </p>
+                </div>
+
+                {/* Consiglio Pratico */}
+                <div className="bg-white border border-slate-200 rounded-lg p-2.5 text-xs text-slate-700">
+                  <strong className="block text-[11px] font-bold text-teal-900 mb-0.5 uppercase tracking-wide">
+                    💡 Consiglio pratico in servizio:
+                  </strong>
+                  <p className="text-xs text-slate-600 italic leading-relaxed">
+                    «{row.consiglio}»
+                  </p>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+
+        {/* Desktop & Tablet Table View (hidden on mobile phones) */}
+        <div className="hidden md:block overflow-x-auto rounded-xl border border-slate-200 mb-6 shadow-xs">
+          <table className="w-full text-left text-xs border-collapse min-w-[680px]">
             <thead>
-              <tr className="bg-slate-100/80 text-slate-800 border-b border-slate-200 font-bold">
-                <th className="p-3.5 whitespace-nowrap">Ambito di Attività</th>
-                <th className="p-3.5 text-emerald-800">Cosa è Consentito</th>
-                <th className="p-3.5 text-rose-800">Cosa è Vietato</th>
+              <tr className="bg-slate-100/90 text-slate-800 border-b border-slate-200 font-bold">
+                <th className="p-3.5 w-1/4 text-slate-900">Ambito di Attività</th>
+                <th className="p-3.5 w-1/3 text-emerald-900 bg-emerald-50/40">
+                  <div className="flex items-center gap-1.5">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Cosa è Consentito</span>
+                  </div>
+                </th>
+                <th className="p-3.5 w-1/3 text-rose-900 bg-rose-50/40">
+                  <div className="flex items-center gap-1.5">
+                    <XCircle className="w-3.5 h-3.5 text-rose-600" />
+                    <span>Cosa è Vietato</span>
+                  </div>
+                </th>
                 <th className="p-3.5 text-slate-700 hidden lg:table-cell">Consiglio Pratico</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
-              {filteredVademecum.map((row, idx) => (
-                <tr key={idx} className="hover:bg-slate-50/70 transition-colors">
-                  <td className="p-3.5 font-bold text-slate-900 whitespace-nowrap align-top">
-                    {row.area}
-                  </td>
-                  <td className="p-3.5 text-slate-700 align-top">
-                    <div className="flex items-start gap-1.5">
-                      <span className="text-emerald-600 font-bold">✓</span>
-                      <span>{row.consentito}</span>
-                    </div>
-                  </td>
-                  <td className="p-3.5 text-slate-700 align-top">
-                    <div className="flex items-start gap-1.5">
-                      <span className="text-rose-600 font-bold">✕</span>
-                      <span>{row.vietato}</span>
-                    </div>
-                  </td>
-                  <td className="p-3.5 text-slate-500 align-top hidden lg:table-cell italic">
-                    {row.consiglio}
+              {filteredVademecum.length === 0 ? (
+                <tr>
+                  <td colSpan={4} className="p-6 text-center text-slate-500">
+                    Nessun argomento trovato per la ricerca «{vademecumSearch}».
                   </td>
                 </tr>
-              ))}
+              ) : (
+                filteredVademecum.map((row, idx) => (
+                  <tr key={idx} className="hover:bg-slate-50/80 transition-colors">
+                    <td className="p-3.5 font-bold text-slate-900 align-top">
+                      <div className="flex items-start gap-2">
+                        <span className="w-5 h-5 rounded bg-teal-100 text-teal-900 font-mono font-bold text-[10px] flex items-center justify-center shrink-0 mt-0.5">
+                          {idx + 1}
+                        </span>
+                        <span>{row.area}</span>
+                      </div>
+                    </td>
+                    <td className="p-3.5 text-slate-800 align-top bg-emerald-50/20">
+                      <div className="flex items-start gap-1.5">
+                        <span className="text-emerald-600 font-bold shrink-0">✓</span>
+                        <span className="leading-relaxed">{row.consentito}</span>
+                      </div>
+                    </td>
+                    <td className="p-3.5 text-slate-800 align-top bg-rose-50/20">
+                      <div className="flex items-start gap-1.5">
+                        <span className="text-rose-600 font-bold shrink-0">✕</span>
+                        <span className="leading-relaxed">{row.vietato}</span>
+                      </div>
+                    </td>
+                    <td className="p-3.5 text-slate-500 align-top hidden lg:table-cell italic text-[11px] leading-relaxed">
+                      {row.consiglio}
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>

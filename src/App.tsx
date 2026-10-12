@@ -9,6 +9,7 @@ import { VademecumModal } from './components/VademecumModal';
 import { TeacherDebriefing } from './components/TeacherDebriefing';
 import { TeacherAuthModal } from './components/TeacherAuthModal';
 import { PrivacyModal } from './components/PrivacyModal';
+import { debriefingService } from './services/debriefingService';
 import { BookOpen, HelpCircle, FileCheck, Award, Shield, Lock, LogOut, ShieldCheck } from 'lucide-react';
 
 export default function App() {
@@ -25,6 +26,8 @@ export default function App() {
     if (typeof window !== 'undefined') {
       const auth = sessionStorage.getItem('pa_social_teacher_authenticated') === 'true';
       setIsTeacherAuthenticated(auth);
+      // Synchronize with server immediately on app load
+      debriefingService.syncFromServer();
     }
   }, []);
 

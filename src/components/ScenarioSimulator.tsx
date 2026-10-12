@@ -106,22 +106,27 @@ export const ScenarioSimulator: React.FC = () => {
   const [justSubmittedNotice, setJustSubmittedNotice] = useState(false);
   const [isRefreshingState, setIsRefreshingState] = useState(false);
 
-  const syncStateFromService = () => {
-    const newSession = debriefingService.getActiveSessionId();
-    const openState = debriefingService.isSessionOpen();
-    setCurrentSessionId(newSession);
-    setIsLabOpen(openState);
+  const [hasUserChangedSession, setHasUserChangedSession] = useState(false);
 
-    try {
-      const savedSubmitted = localStorage.getItem(`pa_test_submitted_${newSession}`) === 'true';
-      setIsSubmitted(savedSubmitted);
-      const savedAnswers = localStorage.getItem(`pa_student_answers_${newSession}`);
-      if (savedAnswers) {
-        setStudentAnswers(JSON.parse(savedAnswers));
+  const syncStateFromService = () => {
+    const activeServerSession = debriefingService.getActiveSessionId();
+    setCurrentSessionId((prev) => {
+      const sessionToUse = hasUserChangedSession ? prev : activeServerSession;
+      const openState = debriefingService.isSessionOpen(sessionToUse);
+      setIsLabOpen(openState);
+
+      try {
+        const savedSubmitted = localStorage.getItem(`pa_test_submitted_${sessionToUse}`) === 'true';
+        setIsSubmitted(savedSubmitted);
+        const savedAnswers = localStorage.getItem(`pa_student_answers_${sessionToUse}`);
+        if (savedAnswers) {
+          setStudentAnswers(JSON.parse(savedAnswers));
+        }
+      } catch {
+        // ignore
       }
-    } catch {
-      // ignore
-    }
+      return sessionToUse;
+    });
   };
 
   // Listen to session changes, open/close status, and reshuffle from teacher + POLLING
@@ -152,7 +157,7 @@ export const ScenarioSimulator: React.FC = () => {
       unsubShuffle();
       clearInterval(pollTimer);
     };
-  }, []);
+  }, [hasUserChangedSession]);
 
   // Save answers whenever they change
   useEffect(() => {
@@ -181,7 +186,9 @@ export const ScenarioSimulator: React.FC = () => {
 
   // Classroom selection change by student (if needed)
   const handleSelectClassroom = (newId: ClassroomSessionId) => {
+    setHasUserChangedSession(true);
     setCurrentSessionId(newId);
+    setIsLabOpen(debriefingService.isSessionOpen(newId));
     try {
       const savedSubmitted = localStorage.getItem(`pa_test_submitted_${newId}`) === 'true';
       setIsSubmitted(savedSubmitted);
@@ -213,12 +220,9 @@ export const ScenarioSimulator: React.FC = () => {
     setPendingChoice(null);
   };
 
-  // Final submission handler
-  const handleFinalSubmit = () => {
-    // Record all answered cases to debriefingService & server
-    Object.entries(studentAnswers).forEach(([caseId, choice]) => {
-      debriefingService.recordAnswer(caseId, choice, currentSessionId);
-    });
+  // Final submission handler using loss-proof atomic batch submission
+  const handleFinalSubmit = async () => {
+    await debriefingService.recordAnswersBatch(studentAnswers, currentSessionId);
 
     setIsSubmitted(true);
     setConfirmSubmitOpen(false);
@@ -333,11 +337,14 @@ export const ScenarioSimulator: React.FC = () => {
               onChange={(e) => handleSelectClassroom(e.target.value as ClassroomSessionId)}
               className="bg-transparent font-bold text-teal-950 border-none focus:outline-none cursor-pointer text-xs"
             >
-              {CLASSROOM_SESSIONS.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.label}
-                </option>
-              ))}
+              {CLASSROOM_SESSIONS.map((s) => {
+                const isOp = debriefingService.isSessionOpen(s.id);
+                return (
+                  <option key={s.id} value={s.id}>
+                    {s.label} {isOp ? '· 🟢 [Aperta]' : '· 🔒 [Chiusa]'}
+                  </option>
+                );
+              })}
             </select>
           </div>
         </div>

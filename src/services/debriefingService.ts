@@ -4,6 +4,7 @@ import { TRAFFIC_LIGHT_CASES } from '../data/courseData';
 const STORAGE_KEY = 'pa_social_anonymous_submissions';
 const ACTIVE_SESSION_KEY = 'pa_social_active_session';
 const SESSION_OPEN_KEY = 'pa_social_session_open';
+const OPEN_SESSIONS_KEY = 'pa_social_open_sessions';
 const CHANNEL_NAME = 'pa_social_debriefing_channel';
 
 export const CLASSROOM_SESSIONS: ClassroomSessionInfo[] = [
@@ -116,35 +117,129 @@ if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
 }
 
 export const debriefingService = {
-  // Check if current classroom session is opened by teacher
-  isSessionOpen(): boolean {
+  // Check if a specific classroom session (or current active session) is open
+  isSessionOpen(sessionId?: ClassroomSessionId): boolean {
     if (typeof window === 'undefined') return true;
-    const stored = localStorage.getItem(SESSION_OPEN_KEY);
-    // If not set yet, default to true so first-time visitors aren't blocked prior to fetch
-    if (stored === null) return true;
-    return stored === 'true';
+    const targetSession = sessionId || this.getActiveSessionId();
+
+    try {
+      const storedMap = localStorage.getItem(OPEN_SESSIONS_KEY);
+      if (storedMap) {
+        const parsed = JSON.parse(storedMap);
+        if (targetSession in parsed) {
+          return Boolean(parsed[targetSession]);
+        }
+      }
+    } catch {
+      // fallback
+    }
+
+    const storedGlobal = localStorage.getItem(SESSION_OPEN_KEY);
+    if (storedGlobal === null) return true;
+    return storedGlobal === 'true';
   },
 
-  // Open or close classroom test for students
-  setSessionOpen(isOpen: boolean, sessionId?: ClassroomSessionId): void {
+  // Get full dictionary of open state per classroom
+  getOpenSessions(): Record<string, boolean> {
+    const defaults: Record<string, boolean> = {
+      '27_ottobre_mattina': true,
+      '27_ottobre_pomeriggio': false,
+      '28_ottobre_mattina': false,
+      '28_ottobre_pomeriggio': false,
+    };
+    if (typeof window === 'undefined') return defaults;
+    try {
+      const stored = localStorage.getItem(OPEN_SESSIONS_KEY);
+      if (stored) {
+        return { ...defaults, ...JSON.parse(stored) };
+      }
+    } catch {
+      // ignore
+    }
+    return defaults;
+  },
+
+  // Open or close classroom test for students (per session or globally)
+  async setSessionOpen(isOpen: boolean, sessionId?: ClassroomSessionId): Promise<void> {
     if (typeof window === 'undefined') return;
+    const targetSession = sessionId || this.getActiveSessionId();
+
+    // Update local open map
+    const openMap = this.getOpenSessions();
+    openMap[targetSession] = isOpen;
+    localStorage.setItem(OPEN_SESSIONS_KEY, JSON.stringify(openMap));
     localStorage.setItem(SESSION_OPEN_KEY, isOpen ? 'true' : 'false');
     if (sessionId) {
       localStorage.setItem(ACTIVE_SESSION_KEY, sessionId);
     }
-    const targetSession = sessionId || this.getActiveSessionId();
+
     window.dispatchEvent(
-      new CustomEvent('pa_debriefing_session_status', { detail: { isOpen, sessionId: targetSession } })
+      new CustomEvent('pa_debriefing_session_status', {
+        detail: { isOpen, sessionId: targetSession, openSessions: openMap },
+      })
     );
     window.dispatchEvent(new CustomEvent('pa_debriefing_session_change', { detail: targetSession }));
-    broadcastChannel?.postMessage({ type: 'SESSION_STATUS', isOpen, sessionId: targetSession });
+    broadcastChannel?.postMessage({
+      type: 'SESSION_STATUS',
+      isOpen,
+      sessionId: targetSession,
+      openSessions: openMap,
+    });
 
     // Sync active session and open state with server
-    fetch('/api/responses/active-session', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sessionId: targetSession, isOpen }),
-    }).catch(() => {});
+    try {
+      const res = await fetch('/api/responses/active-session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId: targetSession,
+          isOpen,
+          openSessions: openMap,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.openSessions) {
+          localStorage.setItem(OPEN_SESSIONS_KEY, JSON.stringify(data.openSessions));
+        }
+      }
+    } catch {
+      // offline fallback
+    }
+  },
+
+  // Open or close all 4 sessions simultaneously
+  async setAllSessionsOpen(allOpen: boolean): Promise<void> {
+    if (typeof window === 'undefined') return;
+    const openMap: Record<string, boolean> = {
+      '27_ottobre_mattina': allOpen,
+      '27_ottobre_pomeriggio': allOpen,
+      '28_ottobre_mattina': allOpen,
+      '28_ottobre_pomeriggio': allOpen,
+    };
+    localStorage.setItem(OPEN_SESSIONS_KEY, JSON.stringify(openMap));
+    localStorage.setItem(SESSION_OPEN_KEY, allOpen ? 'true' : 'false');
+
+    window.dispatchEvent(
+      new CustomEvent('pa_debriefing_session_status', {
+        detail: { isOpen: allOpen, openSessions: openMap },
+      })
+    );
+    broadcastChannel?.postMessage({
+      type: 'SESSION_STATUS',
+      isOpen: allOpen,
+      openSessions: openMap,
+    });
+
+    try {
+      await fetch('/api/responses/active-session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ allOpen, openSessions: openMap }),
+      });
+    } catch {
+      // offline fallback
+    }
   },
 
   // Get active session ID
@@ -168,11 +263,60 @@ export const debriefingService = {
     fetch('/api/responses/active-session', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sessionId, isOpen: this.isSessionOpen() }),
+      body: JSON.stringify({ sessionId, isOpen: this.isSessionOpen(sessionId) }),
     }).catch(() => {});
   },
 
-  // Record an anonymous answer for a specific session (or active session)
+  // Batch record all answers on final submission (atomic and loss-proof)
+  async recordAnswersBatch(
+    answers: Record<string, 'Verde' | 'Rosso'>,
+    sessionId: ClassroomSessionId
+  ): Promise<boolean> {
+    if (typeof window === 'undefined') return true;
+
+    const targetSession = sessionId || this.getActiveSessionId();
+    const now = Date.now();
+    const newSubs: AnonymousSubmission[] = Object.entries(answers).map(([caseId, choice], idx) => ({
+      id: `${now}-${idx}-${Math.random().toString(36).substring(2, 7)}`,
+      caseId,
+      choice,
+      sessionId: targetSession,
+      timestamp: now,
+    }));
+
+    // Update local cache immediately
+    const current = this.getLocalSubmissions();
+    current.push(...newSubs);
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(current));
+      window.dispatchEvent(new CustomEvent('pa_debriefing_update'));
+      broadcastChannel?.postMessage({ type: 'NEW_SUBMISSION' });
+    } catch (e) {
+      console.warn('LocalStorage error:', e);
+    }
+
+    // Sync atomically to server
+    try {
+      const res = await fetch('/api/responses/batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          answers,
+          sessionId: targetSession,
+        }),
+      });
+      if (res.ok) {
+        // Refresh from server to ensure perfect consistency
+        await this.syncFromServer();
+        return true;
+      }
+    } catch (e) {
+      console.warn('Batch submission server sync error:', e);
+    }
+    return false;
+  },
+
+  // Record a single anonymous answer
   recordAnswer(
     caseId: string,
     choice: 'Verde' | 'Giallo' | 'Rosso',
@@ -200,7 +344,7 @@ export const debriefingService = {
       console.warn('LocalStorage error:', e);
     }
 
-    // Sync to server so Pietro receives answers from all classroom phones/devices
+    // Sync to server
     fetch('/api/responses', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -209,10 +353,7 @@ export const debriefingService = {
         choice,
         sessionId: targetSession,
       }),
-    }).catch((e) => {
-      // In offline/static mode, local storage continues to work
-      console.info('Offline mode / local storage only:', e);
-    });
+    }).catch(() => {});
   },
 
   // Read local submissions
@@ -227,29 +368,47 @@ export const debriefingService = {
     }
   },
 
-  // Fetch submissions from server and merge with local
+  // Fetch submissions and session state from server
   async syncFromServer(): Promise<AnonymousSubmission[]> {
     if (typeof window === 'undefined') return [];
     try {
-      const res = await fetch('/api/responses');
+      const res = await fetch(`/api/responses?_t=${Date.now()}`, {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache',
+          Pragma: 'no-cache',
+        },
+      });
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data.submissions)) {
           // Merge server submissions
           localStorage.setItem(STORAGE_KEY, JSON.stringify(data.submissions));
+
           if (data.activeSessionId && CLASSROOM_SESSIONS.some((s) => s.id === data.activeSessionId)) {
             localStorage.setItem(ACTIVE_SESSION_KEY, data.activeSessionId);
           }
           if (typeof data.isSessionOpen === 'boolean') {
             localStorage.setItem(SESSION_OPEN_KEY, data.isSessionOpen ? 'true' : 'false');
           }
+          if (data.openSessions && typeof data.openSessions === 'object') {
+            localStorage.setItem(OPEN_SESSIONS_KEY, JSON.stringify(data.openSessions));
+          }
+
           // Notify any listening components
           window.dispatchEvent(
             new CustomEvent('pa_debriefing_session_status', {
-              detail: { isOpen: data.isSessionOpen, sessionId: data.activeSessionId },
+              detail: {
+                isOpen: data.isSessionOpen,
+                sessionId: data.activeSessionId,
+                openSessions: data.openSessions,
+              },
             })
           );
-          window.dispatchEvent(new CustomEvent('pa_debriefing_session_change', { detail: data.activeSessionId }));
+          window.dispatchEvent(
+            new CustomEvent('pa_debriefing_session_change', { detail: data.activeSessionId })
+          );
+          window.dispatchEvent(new CustomEvent('pa_debriefing_update'));
           return data.submissions;
         }
       }
@@ -412,20 +571,32 @@ export const debriefingService = {
     };
   },
 
-  // Seed simulated classroom data for tests
-  seedSampleClassroom(sessionId: ClassroomSessionId, count = 26): void {
-    const mockSubmissions: AnonymousSubmission[] = [];
+  // Seed simulated classroom data for tests (synced to server)
+  async seedSampleClassroom(sessionId: ClassroomSessionId, count = 26): Promise<void> {
+    try {
+      const res = await fetch('/api/responses/seed', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId, count }),
+      });
+      if (res.ok) {
+        await this.syncFromServer();
+        return;
+      }
+    } catch {
+      // offline fallback
+    }
 
-    // Binary distributions: [% Verde, % Rosso]
+    const mockSubmissions: AnonymousSubmission[] = [];
     const distributions: Record<string, [number, number]> = {
-      'case-1': [85, 15], // Verde
-      'case-2': [90, 10], // Verde
-      'case-3': [25, 75], // Rosso
-      'case-4': [20, 80], // Rosso
-      'case-5': [22, 78], // Rosso
-      'case-6': [8, 92],  // Rosso
-      'case-7': [5, 95],  // Rosso
-      'case-8': [12, 88], // Rosso
+      'case-1': [85, 15],
+      'case-2': [90, 10],
+      'case-3': [25, 75],
+      'case-4': [20, 80],
+      'case-5': [22, 78],
+      'case-6': [8, 92],
+      'case-7': [5, 95],
+      'case-8': [12, 88],
     };
 
     TRAFFIC_LIGHT_CASES.forEach((c) => {
@@ -433,7 +604,6 @@ export const debriefingService = {
       for (let i = 0; i < count; i++) {
         const rand = Math.random() * 100;
         const choice: 'Verde' | 'Rosso' = rand < dist[0] ? 'Verde' : 'Rosso';
-
         mockSubmissions.push({
           id: `seed-${sessionId}-${c.id}-${i}-${Math.random().toString(36).substring(2, 6)}`,
           caseId: c.id,
@@ -444,24 +614,16 @@ export const debriefingService = {
       }
     });
 
-    // Merge with existing other sessions
     const existingOther = this.getLocalSubmissions().filter((s) => s.sessionId !== sessionId);
     const merged = [...existingOther, ...mockSubmissions];
 
     localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
     window.dispatchEvent(new CustomEvent('pa_debriefing_update'));
     broadcastChannel?.postMessage({ type: 'NEW_SUBMISSION' });
-
-    // Sync to server
-    fetch('/api/responses/seed', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sessionId, count }),
-    }).catch(() => {});
   },
 
   // Clear submissions for a specific classroom session, or for all
-  clearSubmissions(sessionId?: ClassroomSessionId | 'all'): void {
+  async clearSubmissions(sessionId?: ClassroomSessionId | 'all'): Promise<void> {
     if (typeof window === 'undefined') return;
 
     if (!sessionId || sessionId === 'all') {
@@ -474,11 +636,15 @@ export const debriefingService = {
     window.dispatchEvent(new CustomEvent('pa_debriefing_update'));
     broadcastChannel?.postMessage({ type: 'RESET' });
 
-    // Sync reset to server
-    fetch('/api/responses/reset', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sessionId: sessionId || 'all' }),
-    }).catch(() => {});
+    try {
+      await fetch('/api/responses/reset', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId: sessionId || 'all' }),
+      });
+      await this.syncFromServer();
+    } catch {
+      // offline fallback
+    }
   },
 };

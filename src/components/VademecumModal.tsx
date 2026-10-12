@@ -74,13 +74,41 @@ export const VademecumModal: React.FC<VademecumModalProps> = ({ isOpen, onClose 
             </div>
           </div>
 
-          {/* Full Table */}
+          {/* Full Table / Cards */}
           <div>
             <h4 className="font-bold text-slate-900 text-sm mb-3">
               Tabella di Confronto: Azioni Consentite vs Vietate
             </h4>
-            <div className="border border-slate-200 rounded-xl overflow-hidden">
-              <table className="w-full text-left text-xs border-collapse">
+
+            {/* Mobile Cards (sm:hidden) */}
+            <div className="block sm:hidden space-y-3 mb-4">
+              {VADEMECUM_ROWS.map((row, i) => (
+                <div key={i} className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-2 text-xs">
+                  <div className="font-bold text-slate-900 border-b border-slate-200 pb-1.5 flex items-center justify-between">
+                    <span>{row.area}</span>
+                    <span className="text-[10px] font-mono text-teal-800 bg-teal-100 px-1.5 py-0.5 rounded">
+                      #{i + 1}
+                    </span>
+                  </div>
+                  <div className="bg-emerald-50 text-emerald-950 p-2 rounded border border-emerald-200">
+                    <strong className="block text-emerald-900 font-bold mb-0.5">✓ Consentito:</strong>
+                    <span>{row.consentito}</span>
+                  </div>
+                  <div className="bg-rose-50 text-rose-950 p-2 rounded border border-rose-200">
+                    <strong className="block text-rose-900 font-bold mb-0.5">✕ Vietato:</strong>
+                    <span>{row.vietato}</span>
+                  </div>
+                  <div className="bg-white text-slate-600 p-2 rounded border border-slate-200 italic text-[11px]">
+                    <strong className="not-italic font-bold text-slate-800 block mb-0.5">💡 Regola pratica:</strong>
+                    <span>{row.consiglio}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Desktop Table (hidden sm:block) */}
+            <div className="hidden sm:block border border-slate-200 rounded-xl overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse min-w-[550px]">
                 <thead>
                   <tr className="bg-slate-100 text-slate-800 border-b border-slate-200 font-bold">
                     <th className="p-2.5">Ambito</th>
@@ -92,7 +120,7 @@ export const VademecumModal: React.FC<VademecumModalProps> = ({ isOpen, onClose 
                 <tbody className="divide-y divide-slate-200">
                   {VADEMECUM_ROWS.map((row, i) => (
                     <tr key={i} className="hover:bg-slate-50">
-                      <td className="p-2.5 font-bold text-slate-900 whitespace-nowrap align-top">
+                      <td className="p-2.5 font-bold text-slate-900 align-top">
                         {row.area}
                       </td>
                       <td className="p-2.5 text-slate-700 align-top">

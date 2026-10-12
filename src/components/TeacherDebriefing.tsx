@@ -35,14 +35,26 @@ interface TeacherDebriefingProps {
   onLogout: () => void;
 }
 
-const APP_VERSION = 'v2.4.0';
+const APP_VERSION = 'v2.5.0';
 
 const CHANGELOG_ENTRIES = [
+  {
+    version: 'v2.5.0',
+    date: '12 Ottobre 2026',
+    title: 'Sincronizzazione Multi-Device Cloud & Modulo 3 Responsive Mobile',
+    badge: 'Versione Attuale',
+    changes: [
+      'Sincronizzazione Real-Time Multi-Device: debriefing e stato aule sincronizzati e persistiti lato server tra qualsiasi dispositivo (PC, tablet, smartphone).',
+      'Gestione Apertura Indipendente per le 4 Aule: ciascuna sessione (27 e 28 Ottobre, Mattina e Pomeriggio) ha il proprio stato dedicato di apertura/chiusura con pulsanti di controllo rapido.',
+      'Badge di stato (🟢 Aperta / 🔒 Chiusa) e contatore risposte visibili in tempo reale su ogni singola pillola d\'aula.',
+      'Invio atomico e protetto delle risposte da parte dei corsisti (/api/responses/batch) per evitare perdite di pacchetti.',
+      'Modulo 3 (Vademecum) completamente responsive su dispositivi mobili con schede tematiche dedicate per agevole lettura.',
+    ],
+  },
   {
     version: 'v2.4.0',
     date: '28 Ottobre 2026',
     title: 'Modalità Decisionale Binaria, Gating Aula e Sicurezza PIN',
-    badge: 'Versione Attuale',
     changes: [
       'Passaggio a 2 sole opzioni nel laboratorio: Verde (Corretta) e Rossa (Da evitare o che richiede cautela).',
       'Inserimento del messaggio di conferma per validare la risposta selezionata dal discente.',
@@ -98,8 +110,10 @@ const CHANGELOG_ENTRIES = [
 ];
 
 export const TeacherDebriefing: React.FC<TeacherDebriefingProps> = ({ onLogout }) => {
-  const [selectedSession, setSelectedSession] = useState<ClassroomSessionId | 'all'>('27_ottobre_mattina');
-  const [stats, setStats] = useState(() => debriefingService.getDebriefStats('27_ottobre_mattina'));
+  const [selectedSession, setSelectedSession] = useState<ClassroomSessionId | 'all'>(() =>
+    debriefingService.getActiveSessionId()
+  );
+  const [stats, setStats] = useState(() => debriefingService.getDebriefStats(debriefingService.getActiveSessionId()));
   const [presentationMode, setPresentationMode] = useState(false);
   const [presentationCaseIndex, setPresentationCaseIndex] = useState(0);
   const [sortByCritical, setSortByCritical] = useState(false);
@@ -109,47 +123,105 @@ export const TeacherDebriefing: React.FC<TeacherDebriefingProps> = ({ onLogout }
   const [shuffledNotice, setShuffledNotice] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [showChangelogModal, setShowChangelogModal] = useState(false);
+  const [lastSyncTime, setLastSyncTime] = useState<string>(() =>
+    new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+  );
+  const [hasManuallySelectedTab, setHasManuallySelectedTab] = useState(false);
 
   // Classroom lab open state
   const [isLabOpen, setIsLabOpen] = useState<boolean>(() => debriefingService.isSessionOpen());
+  const [openSessions, setOpenSessions] = useState<Record<string, boolean>>(() =>
+    debriefingService.getOpenSessions()
+  );
   const [activeSessionGlobal, setActiveSessionGlobal] = useState<ClassroomSessionId>(() =>
     debriefingService.getActiveSessionId()
   );
 
-  // Sync from server on mount and periodically every 4 seconds
+  // Sync from server on mount and periodically every 3 seconds for real-time multi-device synchronization
   useEffect(() => {
+    let isMounted = true;
+
     const fetchFreshData = async () => {
       await debriefingService.syncFromServer();
-      setStats(debriefingService.getDebriefStats(selectedSession));
-      setIsLabOpen(debriefingService.isSessionOpen());
-      setActiveSessionGlobal(debriefingService.getActiveSessionId());
+      if (!isMounted) return;
+
+      const serverActive = debriefingService.getActiveSessionId();
+      const serverOpenMap = debriefingService.getOpenSessions();
+      const serverGlobalOpen = debriefingService.isSessionOpen();
+
+      setActiveSessionGlobal(serverActive);
+      setOpenSessions(serverOpenMap);
+      setIsLabOpen(serverGlobalOpen);
+
+      // On initial load across devices, align with server's active session if teacher didn't manually pick a tab
+      if (!hasManuallySelectedTab) {
+        setSelectedSession((current) => {
+          if (current !== 'all' && current !== serverActive) {
+            setStats(debriefingService.getDebriefStats(serverActive));
+            return serverActive;
+          }
+          setStats(debriefingService.getDebriefStats(current));
+          return current;
+        });
+      } else {
+        setStats(debriefingService.getDebriefStats(selectedSession));
+      }
+
+      setLastSyncTime(
+        new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+      );
     };
 
     fetchFreshData();
-    const interval = setInterval(fetchFreshData, 4000);
-    return () => clearInterval(interval);
-  }, [selectedSession]);
+    const interval = setInterval(fetchFreshData, 3000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [selectedSession, hasManuallySelectedTab]);
 
   // Subscribe to local/broadcast events
   useEffect(() => {
     const unsubscribe = debriefingService.onUpdate(() => {
       setStats(debriefingService.getDebriefStats(selectedSession));
       setIsLabOpen(debriefingService.isSessionOpen());
+      setOpenSessions(debriefingService.getOpenSessions());
       setActiveSessionGlobal(debriefingService.getActiveSessionId());
     });
     return () => unsubscribe();
   }, [selectedSession]);
 
   const handleSelectSessionTab = (sessionId: ClassroomSessionId | 'all') => {
+    setHasManuallySelectedTab(true);
     setSelectedSession(sessionId);
     setStats(debriefingService.getDebriefStats(sessionId));
   };
 
-  const handleToggleLabOpen = (shouldOpen: boolean, targetSession?: ClassroomSessionId) => {
-    const sessionToUse = targetSession || (selectedSession !== 'all' ? selectedSession : '27_ottobre_mattina');
-    debriefingService.setSessionOpen(shouldOpen, sessionToUse);
-    setIsLabOpen(shouldOpen);
+  const handleToggleLabOpen = async (shouldOpen: boolean, targetSession?: ClassroomSessionId) => {
+    const sessionToUse = targetSession || (selectedSession !== 'all' ? selectedSession : activeSessionGlobal);
+    setIsSyncing(true);
+    await debriefingService.setSessionOpen(shouldOpen, sessionToUse);
+    setIsLabOpen(debriefingService.isSessionOpen());
+    setOpenSessions(debriefingService.getOpenSessions());
     setActiveSessionGlobal(sessionToUse);
+    setIsSyncing(false);
+    setActiveSessionNotice(true);
+    setTimeout(() => setActiveSessionNotice(false), 3000);
+  };
+
+  const handleToggleAllAule = async (allOpen: boolean) => {
+    setIsSyncing(true);
+    await debriefingService.setAllSessionsOpen(allOpen);
+    setIsLabOpen(allOpen);
+    setOpenSessions(debriefingService.getOpenSessions());
+    setIsSyncing(false);
+    setActiveSessionNotice(true);
+    setTimeout(() => setActiveSessionNotice(false), 3000);
+  };
+
+  const handleSetActiveClassroomOnly = (sessionId: ClassroomSessionId) => {
+    debriefingService.setActiveSessionId(sessionId);
+    setActiveSessionGlobal(sessionId);
     setActiveSessionNotice(true);
     setTimeout(() => setActiveSessionNotice(false), 3000);
   };
@@ -160,28 +232,29 @@ export const TeacherDebriefing: React.FC<TeacherDebriefingProps> = ({ onLogout }
     setTimeout(() => setShuffledNotice(false), 2500);
   };
 
-  const handleSeedClassroom = () => {
-    if (selectedSession === 'all') {
-      debriefingService.seedSampleClassroom('27_ottobre_mattina', 26);
-    } else {
-      debriefingService.seedSampleClassroom(selectedSession, 26);
-    }
+  const handleSeedClassroom = async () => {
+    setIsSyncing(true);
+    const target = selectedSession === 'all' ? activeSessionGlobal : selectedSession;
+    await debriefingService.seedSampleClassroom(target, 26);
     setStats(debriefingService.getDebriefStats(selectedSession));
+    setIsSyncing(false);
   };
 
-  const handleResetConfirmed = () => {
+  const handleResetConfirmed = async () => {
+    setIsSyncing(true);
     if (resetTarget === 'all') {
-      debriefingService.clearSubmissions('all');
+      await debriefingService.clearSubmissions('all');
       CLASSROOM_SESSIONS.forEach((s) => {
         localStorage.removeItem(`pa_test_submitted_${s.id}`);
         localStorage.removeItem(`pa_student_answers_${s.id}`);
       });
     } else {
-      debriefingService.clearSubmissions(selectedSession);
+      await debriefingService.clearSubmissions(selectedSession);
       localStorage.removeItem(`pa_test_submitted_${selectedSession}`);
       localStorage.removeItem(`pa_student_answers_${selectedSession}`);
     }
     setStats(debriefingService.getDebriefStats(selectedSession));
+    setIsSyncing(false);
     setConfirmResetOpen(false);
   };
 
@@ -190,7 +263,11 @@ export const TeacherDebriefing: React.FC<TeacherDebriefingProps> = ({ onLogout }
     await debriefingService.syncFromServer();
     setStats(debriefingService.getDebriefStats(selectedSession));
     setIsLabOpen(debriefingService.isSessionOpen());
+    setOpenSessions(debriefingService.getOpenSessions());
     setActiveSessionGlobal(debriefingService.getActiveSessionId());
+    setLastSyncTime(
+      new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    );
     setTimeout(() => setIsSyncing(false), 500);
   };
 
@@ -423,6 +500,15 @@ export const TeacherDebriefing: React.FC<TeacherDebriefingProps> = ({ onLogout }
 
           {/* Action buttons */}
           <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
+            {/* Live Server Sync indicator */}
+            <div
+              className="inline-flex items-center gap-1.5 px-3 py-2 bg-slate-50 text-slate-700 rounded-xl text-xs font-semibold border border-slate-200"
+              title="Sincronizzazione Cloud in tempo reale attiva ogni 3 secondi"
+            >
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="font-mono text-[11px]">Sync: {lastSyncTime}</span>
+            </div>
+
             {/* Version / Changelog button */}
             <button
               onClick={() => setShowChangelogModal(true)}
@@ -437,7 +523,7 @@ export const TeacherDebriefing: React.FC<TeacherDebriefingProps> = ({ onLogout }
               onClick={handleManualSync}
               disabled={isSyncing}
               className="inline-flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition-colors border border-slate-200"
-              title="Aggiorna risposte dal server in tempo reale"
+              title="Forza aggiornamento immediato delle risposte dal server"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin text-teal-700' : ''}`} />
               <span>Aggiorna Dati</span>
@@ -478,180 +564,297 @@ export const TeacherDebriefing: React.FC<TeacherDebriefingProps> = ({ onLogout }
         {/* ======================================================== */}
         {/* CLASSROOM GATING CONTROL CARD (Open / Close for students) */}
         {/* ======================================================== */}
-        <div className="pt-6 pb-2">
-          <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 sm:p-5 mb-5 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-            <div className="flex items-start gap-3">
-              <div
-                className={`p-2.5 rounded-xl border shrink-0 ${
-                  isLabOpen
-                    ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
-                    : 'bg-amber-50 text-amber-800 border-amber-300'
-                }`}
-              >
-                {isLabOpen ? <Unlock className="w-5 h-5 text-emerald-600" /> : <Lock className="w-5 h-5 text-amber-600" />}
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                    Stato Laboratorio Corsisti:
-                  </span>
-                  {isLabOpen ? (
-                    <span className="inline-flex items-center gap-1.5 bg-emerald-100 text-emerald-900 border border-emerald-300 px-2 py-0.5 rounded-full text-xs font-extrabold">
-                      <span className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse" />
-                      <span>APERTO PER LE RISPOSTE</span>
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-1.5 bg-amber-100 text-amber-900 border border-amber-300 px-2 py-0.5 rounded-full text-xs font-extrabold">
-                      <Lock className="w-3 h-3 text-amber-700" />
-                      <span>CHIUSO (RISPOSTE BLOCCATE)</span>
-                    </span>
-                  )}
-                </div>
-                <p className="text-xs text-slate-600 mt-1">
-                  {isLabOpen ? (
-                    <>
-                      I discenti possono rispondere al test per l'aula attiva:{' '}
-                      <strong className="text-slate-900">{activeSessionInfo?.label}</strong>.
-                    </>
-                  ) : (
-                    'Nessun corsista può inviare risposte finché non apri manualmente la sessione per l\'aula desiderata.'
-                  )}
-                </p>
-              </div>
-            </div>
+        {(() => {
+          const isCurrentTabOpen =
+            selectedSession === 'all'
+              ? Object.values(openSessions).some(Boolean)
+              : Boolean(openSessions[selectedSession]);
+          const currentSessionInfo =
+            selectedSession !== 'all' ? CLASSROOM_SESSIONS.find((s) => s.id === selectedSession) : null;
+          const openAuleCount = Object.values(openSessions).filter(Boolean).length;
 
-            {/* Action buttons for opening, closing, or switching classroom */}
-            <div className="flex flex-wrap items-center gap-2 shrink-0 w-full md:w-auto">
-              {isLabOpen ? (
-                <>
-                  {selectedSession !== 'all' && activeSessionGlobal !== selectedSession && (
-                    <button
-                      onClick={() => handleToggleLabOpen(true, selectedSession)}
-                      className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold transition-all shadow-sm"
-                      title="Attiva questa specifica aula e aprila per i corsisti"
-                    >
-                      <Unlock className="w-4 h-4" />
-                      <span>
-                        Apri quest'Aula per i Corsisti ({CLASSROOM_SESSIONS.find((s) => s.id === selectedSession)?.slot})
-                      </span>
-                    </button>
-                  )}
-                  <button
-                    onClick={() => handleToggleLabOpen(false)}
-                    className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 rounded-xl text-xs font-bold transition-all shadow-xs"
-                    title="Blocca l'invio delle risposte per tutti i corsisti"
+          return (
+            <div className="pt-6 pb-2">
+              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 sm:p-5 mb-5 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
+                <div className="flex items-start gap-3">
+                  <div
+                    className={`p-2.5 rounded-xl border shrink-0 ${
+                      isCurrentTabOpen
+                        ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+                        : 'bg-amber-50 text-amber-800 border-amber-300'
+                    }`}
                   >
-                    <Lock className="w-4 h-4" />
-                    <span>Chiudi Laboratorio (Blocca Risposte)</span>
-                  </button>
-                </>
-              ) : (
-                <button
-                  onClick={() =>
-                    handleToggleLabOpen(
-                      true,
-                      selectedSession !== 'all' ? selectedSession : '27_ottobre_mattina'
-                    )
-                  }
-                  className="w-full md:w-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold transition-all shadow-sm"
-                >
-                  <Unlock className="w-4 h-4" />
-                  <span>
-                    Apri Laboratorio per:{' '}
-                    {selectedSession !== 'all'
-                      ? CLASSROOM_SESSIONS.find((s) => s.id === selectedSession)?.label
-                      : '27 Ottobre Mattina'}
-                  </span>
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* 4 Classrooms Tab Switcher */}
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <Calendar className="w-4 h-4 text-teal-800" />
-              <span className="text-xs font-bold text-slate-900 uppercase tracking-wide">
-                Seleziona l'Aula da Esaminare:
-              </span>
-            </div>
-          </div>
-
-          {activeSessionNotice && (
-            <div className="mb-3 p-2.5 bg-emerald-50 border border-emerald-200 rounded-lg text-xs text-emerald-800 flex items-center gap-2 animate-fadeIn">
-              <Check className="w-4 h-4 text-emerald-600 shrink-0" />
-              <span>
-                Stato sessione aggiornato in tempo reale con successo!
-              </span>
-            </div>
-          )}
-
-          {/* Classroom Selector Pills */}
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-            {CLASSROOM_SESSIONS.map((session) => {
-              const isSelected = selectedSession === session.id;
-              const isGlobalActiveAndOpen = activeSessionGlobal === session.id && isLabOpen;
-
-              return (
-                <button
-                  key={session.id}
-                  onClick={() => handleSelectSessionTab(session.id)}
-                  className={`p-3 rounded-xl border text-left transition-all relative ${
-                    isSelected
-                      ? 'bg-teal-900 text-white border-teal-900 shadow-sm'
-                      : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100 hover:border-slate-300'
-                  }`}
-                >
-                  <div className="flex items-center justify-between mb-1">
-                    <span
-                      className={`text-[10px] font-bold uppercase tracking-wider ${
-                        isSelected ? 'text-teal-200' : 'text-slate-500'
-                      }`}
-                    >
-                      {session.day}
-                    </span>
-                    {isGlobalActiveAndOpen && (
-                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" title="Sessione aperta e attiva per i corsisti" />
+                    {isCurrentTabOpen ? (
+                      <Unlock className="w-5 h-5 text-emerald-600" />
+                    ) : (
+                      <Lock className="w-5 h-5 text-amber-600" />
                     )}
                   </div>
-                  <span className="font-bold text-xs block leading-tight">{session.slot}</span>
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                        {selectedSession === 'all'
+                          ? 'Stato Complessivo Aule:'
+                          : `Stato Aula (${currentSessionInfo?.slot}):`}
+                      </span>
+                      {selectedSession === 'all' ? (
+                        <span
+                          className={`inline-flex items-center gap-1.5 border px-2.5 py-0.5 rounded-full text-xs font-extrabold ${
+                            openAuleCount > 0
+                              ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
+                              : 'bg-amber-100 text-amber-900 border-amber-300'
+                          }`}
+                        >
+                          <span
+                            className={`w-2 h-2 rounded-full ${
+                              openAuleCount > 0 ? 'bg-emerald-600 animate-pulse' : 'bg-amber-600'
+                            }`}
+                          />
+                          <span>
+                            {openAuleCount} di 4 Aule Aperte per le Risposte
+                          </span>
+                        </span>
+                      ) : isCurrentTabOpen ? (
+                        <span className="inline-flex items-center gap-1.5 bg-emerald-100 text-emerald-900 border border-emerald-300 px-2.5 py-0.5 rounded-full text-xs font-extrabold">
+                          <span className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse" />
+                          <span>APERTA PER LE RISPOSTE</span>
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 bg-amber-100 text-amber-900 border border-amber-300 px-2.5 py-0.5 rounded-full text-xs font-extrabold">
+                          <Lock className="w-3 h-3 text-amber-700" />
+                          <span>CHIUSA (RISPOSTE BLOCCATE)</span>
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-slate-600 mt-1 max-w-2xl leading-relaxed">
+                      {selectedSession === 'all' ? (
+                        <>
+                          Stai visualizzando il riepilogo complessivo di tutte e 4 le aule. Clicca su una singola aula qui sotto per aprirla o chiuderla individualmente.
+                        </>
+                      ) : isCurrentTabOpen ? (
+                        <>
+                          I discenti possono rispondere al test per l'aula:{' '}
+                          <strong className="text-slate-900">{currentSessionInfo?.label}</strong>. Qualsiasi corsista collegato da smartphone o PC può compilare e inviare il test.
+                        </>
+                      ) : (
+                        <>
+                          L'invio delle risposte per quest'aula (<strong>{currentSessionInfo?.label}</strong>) è bloccato. Clicca su «Apri quest'Aula» per abilitare i partecipanti.
+                        </>
+                      )}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Action buttons for opening, closing, or switching classroom */}
+                <div className="flex flex-wrap items-center gap-2 shrink-0 w-full lg:w-auto">
+                  {selectedSession !== 'all' ? (
+                    <>
+                      {isCurrentTabOpen ? (
+                        <button
+                          onClick={() => handleToggleLabOpen(false, selectedSession)}
+                          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 rounded-xl text-xs font-bold transition-all shadow-xs"
+                          title="Blocca l'invio delle risposte per questa aula"
+                        >
+                          <Lock className="w-4 h-4" />
+                          <span>Chiudi quest'Aula ({currentSessionInfo?.slot})</span>
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => handleToggleLabOpen(true, selectedSession)}
+                          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold transition-all shadow-sm"
+                          title="Abilita i corsisti a rispondere per questa aula"
+                        >
+                          <Unlock className="w-4 h-4" />
+                          <span>Apri quest'Aula per i Corsisti ({currentSessionInfo?.slot})</span>
+                        </button>
+                      )}
+
+                      {activeSessionGlobal !== selectedSession && (
+                        <button
+                          onClick={() => handleSetActiveClassroomOnly(selectedSession)}
+                          className="inline-flex items-center justify-center gap-1.5 px-3 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-xl text-xs font-semibold transition-all"
+                          title="Imposta questa come aula principale suggerita ai corsisti nel simulatore"
+                        >
+                          <Sparkles className="w-3.5 h-3.5 text-teal-700" />
+                          <span>Imposta come Attiva</span>
+                        </button>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        onClick={() => handleToggleAllAule(true)}
+                        className="inline-flex items-center justify-center gap-2 px-3.5 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold transition-all shadow-sm"
+                      >
+                        <Unlock className="w-4 h-4" />
+                        <span>Apri Tutte e 4 le Aule</span>
+                      </button>
+                      <button
+                        onClick={() => handleToggleAllAule(false)}
+                        className="inline-flex items-center justify-center gap-2 px-3.5 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 rounded-xl text-xs font-bold transition-all shadow-xs"
+                      >
+                        <Lock className="w-4 h-4" />
+                        <span>Chiudi Tutte le Aule</span>
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* 4 Classrooms Tab Switcher */}
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <Calendar className="w-4 h-4 text-teal-800" />
+            <span className="text-xs font-bold text-slate-900 uppercase tracking-wide">
+              Seleziona l'Aula da Esaminare:
+            </span>
+          </div>
+        </div>
+
+        {activeSessionNotice && (
+          <div className="mb-3 p-2.5 bg-emerald-50 border border-emerald-200 rounded-lg text-xs text-emerald-800 flex items-center gap-2 animate-fadeIn">
+            <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span>
+              Stato sincronizzato con successo in tempo reale su tutti i dispositivi!
+            </span>
+          </div>
+        )}
+
+        {/* Classroom Selector Pills */}
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+          {CLASSROOM_SESSIONS.map((session) => {
+            const isSelected = selectedSession === session.id;
+            const isOpen = Boolean(openSessions[session.id]);
+            const isGlobalActive = activeSessionGlobal === session.id;
+            const sessionSubmissions = debriefingService.getSubmissions(session.id);
+            const count = sessionSubmissions.length;
+
+            return (
+              <button
+                key={session.id}
+                onClick={() => handleSelectSessionTab(session.id)}
+                className={`p-3 rounded-xl border text-left transition-all relative ${
+                  isSelected
+                    ? 'bg-teal-900 text-white border-teal-900 shadow-sm ring-2 ring-teal-500/30'
+                    : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100 hover:border-slate-300'
+                }`}
+              >
+                <div className="flex items-center justify-between mb-1">
                   <span
-                    className={`text-[11px] block mt-0.5 ${
+                    className={`text-[10px] font-bold uppercase tracking-wider ${
                       isSelected ? 'text-teal-200' : 'text-slate-500'
                     }`}
                   >
+                    {session.day}
+                  </span>
+                  <div className="flex items-center gap-1">
+                    {isOpen ? (
+                      <span
+                        className="inline-flex items-center gap-1 text-[9px] font-extrabold px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/40"
+                        title="Aula attualmente aperta per i corsisti"
+                      >
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                        <span>APERTA</span>
+                      </span>
+                    ) : (
+                      <span
+                        className={`text-[9px] font-semibold px-1 py-0.2 rounded ${
+                          isSelected ? 'text-slate-300 bg-slate-800' : 'text-slate-400 bg-slate-200/80'
+                        }`}
+                        title="Aula chiusa (risposte bloccate)"
+                      >
+                        CHIUSA
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-xs block leading-tight">{session.slot}</span>
+                  {isGlobalActive && (
+                    <span
+                      className={`text-[9px] font-extrabold px-1 rounded ${
+                        isSelected ? 'bg-amber-400/30 text-amber-300' : 'bg-amber-100 text-amber-900'
+                      }`}
+                      title="Aula principale attiva suggerita ai corsisti"
+                    >
+                      ★ ATTIVA
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex items-center justify-between mt-1 text-[11px]">
+                  <span className={isSelected ? 'text-teal-200' : 'text-slate-500'}>
                     {session.time}
                   </span>
-                </button>
-              );
-            })}
+                  <span
+                    className={`font-mono text-[10px] font-bold ${
+                      count > 0
+                        ? isSelected
+                          ? 'text-emerald-300'
+                          : 'text-emerald-700'
+                        : isSelected
+                        ? 'text-slate-400'
+                        : 'text-slate-400'
+                    }`}
+                  >
+                    {count > 0 ? `${count} risp.` : '0 risp.'}
+                  </span>
+                </div>
+              </button>
+            );
+          })}
 
-            {/* Total / All Classrooms Tab */}
-            <button
-              onClick={() => handleSelectSessionTab('all')}
-              className={`p-3 rounded-xl border text-left transition-all ${
-                selectedSession === 'all'
-                  ? 'bg-teal-900 text-white border-teal-900 shadow-sm'
-                  : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100 hover:border-slate-300'
-              }`}
-            >
-              <span
-                className={`text-[10px] font-bold uppercase tracking-wider block mb-1 ${
-                  selectedSession === 'all' ? 'text-teal-200' : 'text-slate-500'
+          {/* Total / All Classrooms Tab */}
+          {(() => {
+            const totalCount = debriefingService.getLocalSubmissions().length;
+            const openCount = Object.values(openSessions).filter(Boolean).length;
+            return (
+              <button
+                onClick={() => handleSelectSessionTab('all')}
+                className={`p-3 rounded-xl border text-left transition-all ${
+                  selectedSession === 'all'
+                    ? 'bg-teal-900 text-white border-teal-900 shadow-sm ring-2 ring-teal-500/30'
+                    : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100 hover:border-slate-300'
                 }`}
               >
-                Riepilogo Generale
-              </span>
-              <span className="font-bold text-xs block leading-tight">Tutte le 4 Aule</span>
-              <span
-                className={`text-[11px] block mt-0.5 ${
-                  selectedSession === 'all' ? 'text-teal-200' : 'text-slate-500'
-                }`}
-              >
-                Dati aggregati
-              </span>
-            </button>
-          </div>
+                <div className="flex items-center justify-between mb-1">
+                  <span
+                    className={`text-[10px] font-bold uppercase tracking-wider block ${
+                      selectedSession === 'all' ? 'text-teal-200' : 'text-slate-500'
+                    }`}
+                  >
+                    Riepilogo
+                  </span>
+                  <span
+                    className={`text-[9px] font-bold px-1.5 py-0.2 rounded-full ${
+                      selectedSession === 'all'
+                        ? 'bg-teal-800 text-teal-200'
+                        : 'bg-slate-200 text-slate-700'
+                    }`}
+                  >
+                    {openCount}/4 aperte
+                  </span>
+                </div>
+                <span className="font-bold text-xs block leading-tight">Tutte le 4 Aule</span>
+                <div className="flex items-center justify-between mt-1 text-[11px]">
+                  <span className={selectedSession === 'all' ? 'text-teal-200' : 'text-slate-500'}>
+                    Totale Generale
+                  </span>
+                  <span
+                    className={`font-mono text-[10px] font-bold ${
+                      selectedSession === 'all' ? 'text-emerald-300' : 'text-emerald-700'
+                    }`}
+                  >
+                    {totalCount} risp.
+                  </span>
+                </div>
+              </button>
+            );
+          })()}
         </div>
 
         {/* Global Stats Overview Strip */}
